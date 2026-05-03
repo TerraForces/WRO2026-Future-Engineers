@@ -10,7 +10,7 @@
 #ifndef CAR_HPP
 #define CAR_HPP
 
-// include integer type names
+// include integer type names and basic framework functions
 #include <Arduino.h>
 #include <stdint.h>
 
@@ -38,10 +38,8 @@ namespace CAR {
 
     // description of detected objects
     struct OBJECT {
-        uint16_t l; // left x position of the bounding rect in image pixels (0 - 1295)
-        uint16_t r; // right x position of the bounding rect in image pixels (0 - 1295)
-        uint16_t t; // top y position of the bounding rect in image pixels (0 - 1295)
-        uint16_t b; // bottom y position of the bounding rect in image pixels (0 - 1295)
+        uint16_t x; // left x position of the bounding rect in image pixels (0 - 1295)
+        uint16_t y; // top y position of the bounding rect in image pixels (0 - 1295)
         uint16_t w; // bounding rect width in image pixels (0 - 1295)
         uint16_t h; // bounding rect height in image pixels (0 - 1295)
         uint16_t c; // object color (see possible object colors above)
@@ -91,58 +89,68 @@ namespace CAR {
     // @returns MOSFET temperature in °C
     float getMosfetTemp();
 
-    // returns object at a specified index (presorted by relevance)
-    // @param idx index of object to fetch
-    // @returns object at the specified index or empty object if not existing
-    OBJECT getObject(uint16_t idx);
+    // returns objects array (presorted by relevance)
+    // @returns vector of last detected objects
+    std::vector<OBJECT> getObjects();
 
     // reads data and calculates rotation if available, returns last value otherwise
     // @returns Z orientation in degrees
     float getRotation();
 
-    // runs complete initialisation process
-    // loads configuration on sensors and activates display elements
+    // runs complete initialisation process - loads configuration on sensors and activates display elements
+    // @param rpi5 whether to activate the object detection on the Raspberry Pi 5
     void init(bool rpi5 = false);
 
     // appends a string to the logfile on the inserted sd card
     // @param str string to append
     void logSD(String str);
 
+    // runs interactive rotation and distance sensor calibration flow
+    // @param samples number of distance measurements read for each tested viewport center
+    // @param rotationTime time used to analyze noise in rotation measurements in ms
+    // @param rotationRounds number of rounds the car should be moved for rotation factor calibration
     void runCalibration(const uint32_t samples = 50, uint32_t rotationTime = 10000, uint32_t rotationRounds = 8);
-    void runObjectDemo();
 
     // sets camera LED ring colors (min 300us delay between writes required)
-    // @param color color to be displayed on all LEDs (warning: order is green, red, blue)
+    // @param color color to be displayed on all LEDs
+    // @returns true when the color was applied or false when the minimum time between writes hasn't finished yet
     bool setLEDs(COLOR8 color);
 
     // sets camera LED ring colors (min 300us delay between writes required)
-    // @param colors array of LED colors to be displayed (warning: order is green, red, blue)
+    // @param colors array of LED colors to be displayed
+    // @returns true when the colors were applied or false when the minimum time between writes hasn't finished yet
     bool setLEDs(COLOR8 colors[12]);
 
     // changes motor speed and direction using automated speed control
     // @param velocity new velocity (between -1.0f and 1.0f)
-    // @param brakes whether to short the motor to decelerate
-    // @param acceleration acceleration in relative speed / s² (has to be >0)
-    // @param deceleration deceleration in relative speed / s² (has to be >0) - only active without brakes
-    bool setVelocity(float velocity, bool brakes = false, float acceleration = 0.2, float deceleration = -0.3);
+    // @param brakes whether to short the motor to decelerate (works only with velocity = 0.0f)
+    // @param acceleration acceleration in relative speed / s² (has to be >0.0f)
+    // @param deceleration deceleration in relative speed / s² (has to be <0.0f)
+    void setVelocity(float velocity, bool brakes = false, float acceleration = 0.25f, float deceleration = -0.5f);
 
     // sets target servo angle
     // @param angle target angle in degrees
     void setServo(float angle);
 
-    void showFinish();
+    // show finish screen with elapsed time and temperatures
+    // @param userData additional data to be displayed below
+    void showFinish(const char* userData = "");
+
+    // displays detected object boxes according to camera view with additional data
+    void showObjects();
+
+    // displays latest measurements of distance, rotation and color
+    // @param complete whether to draw elements like data labels (waits corresponding time if not)
     void showSensorData(bool complete = false);
 
-    // starts drive and servo control
-    // run after start button has been pressed
+    // starts drive and servo control - only run after start button has been pressed
     void start();
 
-    // updates drive speed and runs background processes
-    // has to be called freqently
+    // updates drive speed and distance and rotation data - has to be called freqently
+    // @param showData show sensor data after update (needs additionally 20 ms)
     void update(bool showData = true);
 
-    // waits until the start button is pressed (blocking)
-    // activates LED while waiting
+    // waits until the start button is pressed (blocking) - activates LED while waiting
     void waitButtonPress();
 }
 

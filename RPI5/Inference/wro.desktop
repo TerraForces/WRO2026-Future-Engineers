@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=WRO26
+Comment=Object Detection
+Type=Application
+Exec=~/Documents/main
+Terminal=true

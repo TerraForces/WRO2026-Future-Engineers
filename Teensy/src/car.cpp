@@ -30,7 +30,7 @@ constexpr uint8_t Pin_ADC_Current_Drive = 21; // in     - drive current over ACS
 constexpr uint8_t Pin_Board_LED         = 13; //    out - LED on Teensy PCB
 constexpr uint8_t Pin_Button_INT        = 14; // in     - start button interrupt
 constexpr uint8_t Pin_Button_LED        = 41; //    out - start button LED
-constexpr uint8_t Pin_Drive_Brake       = 30; //    out - motor direction selection (on LOW): backward
+constexpr uint8_t Pin_Drive_Brake       = 30; //    out - shorts motor to stop faster
 constexpr uint8_t Pin_Drive_PWM         = 22; //    out - motor PWM signal
 constexpr uint8_t Pin_Drive_Rev         = 8;  //    out - enable to drive backwards (only change at standstill)
 constexpr uint8_t Pin_DS18B20_OneWire   = 23; // in out - OneWire bus for communication with the DS18B20 temperature sensors
@@ -68,6 +68,7 @@ constexpr uint16_t Color_Best_Bars  = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_Diff_Neg   = RGB565(0x90, 0x00, 0x00);
 constexpr uint16_t Color_Diff_Pos   = RGB565(0xFF, 0x00, 0x00);
 constexpr uint16_t Color_Error      = RGB565(0xFF, 0x00, 0x00);
+constexpr uint16_t Colors_Objects[] = { RGB565(0xFF, 0x00, 0x00), RGB565(0x00, 0xFF, 0x00), RGB565(0xFF, 0x00, 0xFF) };
 constexpr uint16_t Color_Outlines   = RGB565(0x50, 0x50, 0x50);
 constexpr uint16_t Color_Running    = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_SD_Bar     = RGB565(0x00, 0x00, 0xFF);
@@ -97,20 +98,22 @@ VL53L1X vl53l1x[8] = { &i2c1, &i2c1, &i2c1, &i2c0, &i2c0, &i2c0, &i2c0, &i2c1 };
 // global memory
 int32_t currentVelocity = 0;
 int32_t targetVelocity = 0;
-bool brakes = 0;
 int32_t acceleration = 1;
 int32_t deceleration = -1;
 uint32_t nextTempUpdateTime = 0;
 uint32_t nextDriveUpdateTime = 0;
 CAR::COLOR16 lastColor = {};
 uint16_t lastDistance[8] = {};
+std::vector<CAR::OBJECT> lastObjects, currentObjects;
 float lastRotation = 0.0f;
 float lastVoltage = 0.0f;
 float rotationOffset = 0.0f, rotationTimeOffset = 0.0f, rotationFactor = 0.0f;
 uint8_t vl53l1xViewportCenters[8] = { 199, 199, 199, 199, 199, 199, 199, 199 };
 bool sensorActive[10] = {};
 bool sensorWarning[10] = {};
+bool rpiActive = false;
 uint32_t startTime = 0;
+uint8_t uartReadBuffer[50000] = {};
 
 // reads battery voltage
 // @returns battery voltage in V
@@ -166,11 +169,10 @@ float CAR::getMosfetTemp() {
     return ds18b20.getTempC(Config_DS18B20_MOSFET_Addr);
 }
 
-// returns object at a specified index (presorted by relevance)
-// @param idx index of object to fetch
-// @returns object at the specified index or empty object if not existing
-CAR::OBJECT CAR::getObject(uint16_t idx) {
-    return {};
+// returns objects array (presorted by relevance)
+// @returns vector of last detected objects
+std::vector<CAR::OBJECT> CAR::getObjects() {
+    return lastObjects;
 }
 
 // reads data and calculates rotation if available, returns last value otherwise
@@ -179,8 +181,8 @@ float CAR::getRotation() {
     return lastRotation;
 }
 
-// runs complete initialisation process
-// loads configuration on sensors and activates display elements
+// runs complete initialisation process - loads configuration on sensors and activates display elements
+// @param rpi5 whether to activate the object detection on the Raspberry Pi 5
 void CAR::init(bool rpi5) {
 
     // configure pin modes
@@ -296,19 +298,35 @@ void CAR::init(bool rpi5) {
     // start TCS3472 color sensor
     sensorActive[8] = tcs3472.begin();
 
-    // show battery voltage
-    lastVoltage = getBatteryVoltage();
-    setLEDs(CAR::COLOR8 { (uint8_t)(255 * (lastVoltage > 7.2f)), (uint8_t)(255 * (lastVoltage < 7.8f)), 0 });
+    if(rpi5) {
+        // wait for Raspberry Pi 5 to finish booting
+        Serial7.addMemoryForRead(uartReadBuffer, sizeof(uartReadBuffer));
+        Serial7.begin(500000, SERIAL_8N1);
+        while(Serial7.available() < (int)sizeof(CAR::OBJECT)) yield();
+        rpiActive = true;
+    }
+    else {
+        // show battery voltage
+        lastVoltage = getBatteryVoltage();
+        setLEDs(CAR::COLOR8 { (uint8_t)(255 * (lastVoltage > 7.2f)), (uint8_t)(255 * (lastVoltage < 7.8f)), 0 });
+    }
 }
 
 // appends a string to the logfile on the inserted sd card
 // @param str string to append
 void CAR::logSD(String str) {
-
+    File logFile = SD.open("/log.txt", FILE_WRITE);
+    logFile.println(str);
+    logFile.close();
 }
 
 constexpr uint8_t testViewports[] = { 59, 60, 61, 62, 63, 199, 198, 197, 196, 195, 194 };
 constexpr char directions[8][3] = { "FC", "AL", "FL", "RL", "RC", "RR", "FR", "AR" };
+
+// runs interactive rotation and distance sensor calibration flow
+// @param samples number of distance measurements read for each tested viewport center
+// @param rotationTime time used to analyze noise in rotation measurements in ms
+// @param rotationRounds number of rounds the car should be moved for rotation factor calibration
 void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t rotationRounds) {
 
     // tell user to not touch during first part of calibration
@@ -452,37 +470,41 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
     file.close();
 }
 
-void CAR::runObjectDemo() {
-    lcd.fillScreen(0);
-}
-
 // sets camera LED ring colors (min 300us delay between writes required)
-// @param color color to be displayed on all LEDs (warning: order is green, red, blue)
+// @param color color to be displayed on all LEDs
 bool CAR::setLEDs(COLOR8 color) {
     return leds.fill(*(NeoPixel::COLOR*)&color, 12);
 }
 
 // sets camera LED ring colors (min 300us delay between writes required)
-// @param colors array of LED colors to be displayed (warning: order is green, red, blue)
+// @param colors array of LED colors to be displayed
 bool CAR::setLEDs(COLOR8 colors[12]) {
     return leds.show((NeoPixel::COLOR*)colors, 12);
 }
 
 // changes motor speed and direction using automated speed control
 // @param velocity new velocity (between -1.0f and 1.0f)
-// @param brakes whether to short the motor to decelerate
-// @param acceleration acceleration in relative speed / s² (has to be >0)
-// @param deceleration deceleration in relative speed / s² (has to be >0) - only active without brakes
-bool CAR::setVelocity(float _velocity, bool _brakes, float _acceleration, float _deceleration) {
-    targetVelocity = constrain(_velocity, -1.0f, 1.0f) * 0xFFFF;
-    brakes = _brakes;
-    int32_t accelerationTest = _acceleration * Config_Drive_PWM_Update_Int * 0xFFFF / 1000000.0f;
-    int32_t decelerationTest = _deceleration * Config_Drive_PWM_Update_Int * 0xFFFF / 1000000.0f;
-    if(accelerationTest <= 0) return false;
-    if(decelerationTest >= 0) return false;
-    acceleration = accelerationTest;
-    deceleration = decelerationTest;
-    return true;
+// @param brakes whether to short the motor to decelerate (works only with velocity = 0.0f)
+// @param acceleration acceleration in relative speed / s² (has to be >0.0f)
+// @param deceleration deceleration in relative speed / s² (has to be <0.0f)
+void CAR::setVelocity(float _velocity, bool _brakes, float _acceleration, float _deceleration) {
+
+    // activate active brakes if asked for
+    if((_velocity == 0.0f) && _brakes) {
+        analogWrite(Pin_Drive_PWM, 0);
+        digitalWriteFast(Pin_Drive_Brake, HIGH);
+        targetVelocity = 0;
+        currentVelocity = 0;
+    }
+
+    // calculate PWM duty and duty change values for update()
+    else {
+        targetVelocity = constrain(_velocity, -1.0f, 1.0f) * 0xFFFF;
+        acceleration = _acceleration * Config_Drive_PWM_Update_Int * 0xFFFF / 1000000.0f;
+        deceleration = _deceleration * Config_Drive_PWM_Update_Int * 0xFFFF / 1000000.0f;
+        if(acceleration <= 0) acceleration = 1;
+        if(deceleration >= 0) deceleration = -1;
+    }
 }
 
 // sets target servo angle
@@ -491,31 +513,64 @@ void CAR::setServo(float angle) {
     analogWrite(Pin_Servo_PWM, Config_Servo_Center_Duty + (int)(((angle < -Config_Servo_Max_Angle) ? -Config_Servo_Max_Angle : ((angle > Config_Servo_Max_Angle) ? Config_Servo_Max_Angle : angle)) * Config_Servo_Angle_To_Duty));
 }
 
-void CAR::showFinish() {
+// show finish screen with elapsed time and temperatures
+// @param userData additional data to be displayed below
+void CAR::showFinish(const char* userData) {
     uint32_t time = millis() - startTime;
     lcd.fillScreen(Color_Background);
     lcd.drawText(2, 2, font5x7, ("time: " + String(time / 1000.0f) + " s").c_str(), Color_Text, Color_Background, 2);
-    lcd.drawText(2, 20, font5x7, ("converter: " + String(getConverterTemp()) + " C").c_str(), Color_Text, Color_Background, 1);
-    lcd.drawText(2, 28, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background, 1);
-    lcd.drawText(2, 36, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background, 1);
+    lcd.drawText(2, 20, font5x7, ("converter: " + String(getConverterTemp()) + " C").c_str(), Color_Text, Color_Background);
+    lcd.drawText(2, 28, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background);
+    lcd.drawText(2, 36, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background);
+    lcd.drawText(2, 44, font5x7, userData, Color_Text, Color_Background);
 }
 
+// displays detected object boxes according to camera view with additional data
+void CAR::showObjects() {
+    lcd.fillScreen(Color_Background);
+    lcd.drawRect(9, 9, 1, 110, Color_Text);
+    lcd.drawRect(119, 9, 1, 110, Color_Text);
+    lcd.drawRect(10, 9, 108, 1, Color_Text);
+    lcd.drawRect(10, 119, 108, 1, Color_Text);
+    uint8_t objectCounts[3] = {};
+    for(int32_t i = lastObjects.size() - 1; i >= 0; i--) {
+        CAR::OBJECT object = lastObjects[i];
+        if(object.c) {
+            object.c--;
+            if(object.c <= 2) {
+                uint16_t color = Colors_Objects[object.c];
+                lcd.drawRect(10 + (object.x / 12), 10 + (object.y / 12), object.w / 12, object.h / 12, color);
+                lcd.drawText(11 + (object.x / 12), 11 + (object.y / 12), font5x7, (String(object.p / 10.0f, 1) + "%").c_str(), Color_Text, color);
+                objectCounts[object.c]++;
+            }
+        }
+    }
+    for(uint8_t i = 0; i < 3; i++) {
+        lcd.drawRect(130, 9 + (i * 8), 7, 7, Colors_Objects[i]);
+        lcd.drawText(138, 9 + (i * 8), font5x7, String(objectCounts[i]).c_str(), Color_Text, Color_Background);
+    }
+    lcd.drawText(130, 33, font5x7, (String(getBatteryVoltage()) + "V").c_str(), Color_Text, Color_Background);
+}
+
+// displays latest measurements of distance, rotation and color
+// @param complete whether to draw elements like data labels (waits corresponding time if not)
 void CAR::showSensorData(bool complete) {
     if(complete) {
         lcd.fillScreen(Color_Background);
         for(uint8_t i = 0; i < 8; i++) lcd.drawText(2, 2 + (i * 8), font5x7, (directions[i] + String(": ")).c_str(), Color_Text, Color_Background);
         lcd.drawText(2, 66, font5x7, "rotation: ", Color_Text, Color_Background);
         lcd.drawText(2, 74, font5x7, "color:", Color_Text, Color_Background);
+        lcd.drawText(2, 82, font5x7, "battery:", Color_Text, Color_Background);
     }
     for(uint8_t i = 0; i < 8; i++) lcd.drawText(26, 2 + (i * 8), font5x7, (String(lastDistance[i]) + " mm  ").c_str(), Color_Text, Color_Background);
     lcd.drawText(62, 66, font5x7, (String(lastRotation) + "  ").c_str(), Color_Text, Color_Background);
     tcs3472.readColor(&lastColor);
     lcd.drawRect(44, 74, 7, 7, RGB565(lastColor.r >> 8, lastColor.g >> 8, lastColor.b >> 8));
+    lcd.drawText(56, 82, font5x7, (String(getBatteryVoltage()) + " V").c_str(), Color_Text, Color_Background);
     if(!complete) delayMicroseconds(18300);
 }
 
-// starts drive and servo control
-// run after start button has been pressed
+// starts drive and servo control - only run after start button has been pressed
 void CAR::start() {
 
     // set rotation offset
@@ -552,34 +607,32 @@ void CAR::start() {
     startTime = millis();
 }
 
-#define MIN(a, b) ((a) < (b)) ? (a) : (b)
-#define MAX(a, b) ((a) > (b)) ? (a) : (b)
-
-// updates drive speed and runs background processes
-// has to be called freqently
+// updates drive speed and distance and rotation data - has to be called freqently
+// @param showData show sensor data after update (needs additionally 20 ms)
 void CAR::update(bool showData) {
 
-    // update drive PWM
+    // update drive PWM duty
     uint32_t time = micros();
     if(time > nextDriveUpdateTime) {
         nextDriveUpdateTime = time + Config_Drive_PWM_Update_Int;
         if(currentVelocity != targetVelocity) {
+            digitalWriteFast(Pin_Drive_Brake, LOW);
             if(currentVelocity < 0) {
-                if(targetVelocity < currentVelocity) currentVelocity = MAX(currentVelocity - acceleration, targetVelocity);
-                else currentVelocity = MIN(currentVelocity - deceleration, 0);
+                if(targetVelocity < currentVelocity) currentVelocity = max(currentVelocity - acceleration, targetVelocity);
+                else currentVelocity = min(currentVelocity - deceleration, 0);
             }
             else if(currentVelocity > 0) {
-                if(targetVelocity < currentVelocity) currentVelocity = MAX(currentVelocity + deceleration, 0);
-                else currentVelocity = MIN(currentVelocity + acceleration, targetVelocity);
+                if(targetVelocity < currentVelocity) currentVelocity = max(currentVelocity + deceleration, 0);
+                else currentVelocity = min(currentVelocity + acceleration, targetVelocity);
             }
             else {
                 if(targetVelocity > 0) {
                     digitalWriteFast(Pin_Drive_Rev, LOW);
-                    currentVelocity = MIN(acceleration, targetVelocity);
+                    currentVelocity = min(acceleration, targetVelocity);
                 }
                 else {
                     digitalWriteFast(Pin_Drive_Rev, HIGH);
-                    currentVelocity = MAX(-acceleration, targetVelocity);
+                    currentVelocity = max(-acceleration, targetVelocity);
                 }
             }
             analogWrite(Pin_Drive_PWM, abs(currentVelocity));
@@ -607,6 +660,19 @@ void CAR::update(bool showData) {
     // update event handlers
     yield();
 
+    // update UART to RPI5
+    if(rpiActive) {
+        while(Serial7.available() >= (int)sizeof(CAR::OBJECT)) {
+            CAR::OBJECT object = {};
+            Serial7.readBytes((uint8_t*)&object, sizeof(CAR::OBJECT));
+            if(object.c) currentObjects.push_back(object);
+            else {
+                lastObjects = currentObjects;
+                currentObjects.clear();
+            }
+        }
+    }
+
     // update distances
     for(uint8_t i = 0; i < 8; i++) {
         if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
@@ -622,10 +688,9 @@ void CAR::update(bool showData) {
     if(showData) showSensorData();
 }
 
-// waits until the start button is pressed (blocking)
-// activates LED while waiting
+// waits until the start button is pressed (blocking) - activates LED while waiting
 void CAR::waitButtonPress() {
     digitalWriteFast(Pin_Button_LED, HIGH);
-    while(digitalReadFast(Pin_Button_INT)) delay(1);
+    while(digitalReadFast(Pin_Button_INT)) yield();
     digitalWriteFast(Pin_Button_LED, LOW);
 }

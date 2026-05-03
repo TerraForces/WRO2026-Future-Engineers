@@ -53,11 +53,9 @@ bool MPU9250::getRotation(float* rotation) {
     float a3 = qToFloat(quat[3]);
     float degrees = atan2(2.0f * ((a1 * a2) - (a0 * a3)), (-2.0f * ((a2 * a2) + (a3 * a3))) + 1.0f) * 57.29577951308232f;
     if(degrees < 0.0f) degrees += 360.0f;
-    //if(abs(degrees - _lastRotation) < _filter) {
-        if((degrees < 90.0f) && (_lastRotation > 270.0f)) _rounds++;
-        if((degrees > 270.0f) && (_lastRotation < 90.0f)) _rounds--;
-        *rotation = -(degrees + (_rounds * 360.0f));
-        _lastRotation = degrees;
-    //}
+    if((degrees < 90.0f) && (_lastRotation > 270.0f)) _rounds++;
+    if((degrees > 270.0f) && (_lastRotation < 90.0f)) _rounds--;
+    *rotation = -(degrees + (_rounds * 360.0f));
+    _lastRotation = degrees;
     return true;
 }
