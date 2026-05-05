@@ -82,7 +82,7 @@ constexpr float    Config_Drive_PWM_Freq         = 2959.955f;
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000; // us
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;
 constexpr uint16_t Config_Servo_Center_Duty      = 33350;
-constexpr float    Config_Servo_Max_Angle        = 45.0f;
+constexpr float    Config_Servo_Max_Angle        = 50.0f;
 constexpr uint32_t Config_Temp_Update_Int        = 500000; // us
 constexpr bool     Config_VL53L1X_LongMode[8]    = { 1, 1, 1, 1, 1, 1, 1, 1 };
 
@@ -542,6 +542,9 @@ void CAR::showObjects() {
                 lcd.drawRect(10 + (object.x / 12), 10 + (object.y / 12), object.w / 12, object.h / 12, color);
                 lcd.drawText(11 + (object.x / 12), 11 + (object.y / 12), font5x7, (String(object.p / 10.0f, 1) + "%").c_str(), Color_Text, color);
                 objectCounts[object.c]++;
+
+                // data of first detected object (temp)
+                if(i == 0) lcd.drawText(2, 121, font5x7, ("x=" + String(object.x) + " y=" + String(object.y) + " w=" + String(object.w) + " h=" + String(object.h)).c_str(), Color_Text, Color_Background);
             }
         }
     }
@@ -559,27 +562,30 @@ void CAR::showSensorData(bool complete) {
         lcd.fillScreen(Color_Background);
         for(uint8_t i = 0; i < 8; i++) lcd.drawText(2, 2 + (i * 8), font5x7, (directions[i] + String(": ")).c_str(), Color_Text, Color_Background);
         lcd.drawText(2, 66, font5x7, "rotation: ", Color_Text, Color_Background);
-        lcd.drawText(2, 74, font5x7, "color:", Color_Text, Color_Background);
-        lcd.drawText(2, 82, font5x7, "battery:", Color_Text, Color_Background);
+        lcd.drawText(2, 74, font5x7, "battery:", Color_Text, Color_Background);
+        lcd.drawText(2, 82, font5x7, "color: r:", Color_Text, Color_Background);
+        lcd.drawText(44, 90, font5x7, "g:", Color_Text, Color_Background);
+        lcd.drawText(44, 98, font5x7, "b:", Color_Text, Color_Background);
+        lcd.drawText(44, 106, font5x7, "c:", Color_Text, Color_Background);
     }
     for(uint8_t i = 0; i < 8; i++) lcd.drawText(26, 2 + (i * 8), font5x7, (String(lastDistance[i]) + " mm  ").c_str(), Color_Text, Color_Background);
     lcd.drawText(62, 66, font5x7, (String(lastRotation) + "  ").c_str(), Color_Text, Color_Background);
+    lcd.drawText(56, 74, font5x7, (String(getBatteryVoltage()) + " V ").c_str(), Color_Text, Color_Background);
     tcs3472.readColor(&lastColor);
-    lcd.drawRect(44, 74, 7, 7, RGB565(lastColor.r >> 8, lastColor.g >> 8, lastColor.b >> 8));
-    lcd.drawText(56, 82, font5x7, (String(getBatteryVoltage()) + " V").c_str(), Color_Text, Color_Background);
-    if(!complete) delayMicroseconds(18300);
+    lcd.drawText(62, 82, font5x7, (String(lastColor.r) + "  ").c_str(), Color_Text, Color_Background);
+    lcd.drawText(62, 90, font5x7, (String(lastColor.g) + "  ").c_str(), Color_Text, Color_Background);
+    lcd.drawText(62, 98, font5x7, (String(lastColor.b) + "  ").c_str(), Color_Text, Color_Background);
+    lcd.drawText(62, 106, font5x7, (String(lastColor.c) + "  ").c_str(), Color_Text, Color_Background);
+    lcd.drawRect(2, 90, 41, 23, RGB565(lastColor.r >> 2, lastColor.g >> 2, lastColor.b >> 2));
 }
 
 // starts drive and servo control - only run after start button has been pressed
 void CAR::start() {
 
     // set rotation offset
-    do {
-        while(!digitalReadFast(Pin_IMU_INT));
-        imu.getRotation(&lastRotation);
-        lastRotation += millis() * rotationTimeOffset;
-        lastRotation *= rotationFactor;
-    } while(lastRotation < -40.0f);
+    while(!imu.getRotation(&lastRotation)) delay(1);
+    lastRotation += millis() * rotationTimeOffset;
+    lastRotation *= rotationFactor;
     rotationOffset = lastRotation;
 
     // configure drive pins and PWM
@@ -598,10 +604,11 @@ void CAR::start() {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
         }
         if(digitalReadFast(Pin_IMU_INT)) {
-            imu.getRotation(&lastRotation);
-            lastRotation += millis() * rotationTimeOffset;
-            lastRotation *= rotationFactor;
-            lastRotation -= rotationOffset;
+            if(imu.getRotation(&lastRotation)) {
+                lastRotation += millis() * rotationTimeOffset;
+                lastRotation *= rotationFactor;
+                lastRotation -= rotationOffset;
+            }
         }
     }
     startTime = millis();
@@ -609,7 +616,7 @@ void CAR::start() {
 
 // updates drive speed and distance and rotation data - has to be called freqently
 // @param showData show sensor data after update (needs additionally 20 ms)
-void CAR::update(bool showData) {
+void CAR::update() {
 
     // update drive PWM duty
     uint32_t time = micros();
@@ -680,12 +687,12 @@ void CAR::update(bool showData) {
 
     // update rotation
     if(digitalReadFast(Pin_IMU_INT)) {
-        imu.getRotation(&lastRotation);
-        lastRotation += millis() * rotationTimeOffset;
-        lastRotation *= rotationFactor;
-        lastRotation -= rotationOffset;
+        if(imu.getRotation(&lastRotation)) {
+            lastRotation += millis() * rotationTimeOffset;
+            lastRotation *= rotationFactor;
+            lastRotation -= rotationOffset;
+        }
     }
-    if(showData) showSensorData();
 }
 
 // waits until the start button is pressed (blocking) - activates LED while waiting

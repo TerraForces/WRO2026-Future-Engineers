@@ -7,8 +7,8 @@
 #pragma GCC optimize("-Ofast")
 
 // select program
-//#define TEST
-#define OBJECTS
+#define TEST
+//#define OBJECTS
 
 #include "car.hpp"
 
@@ -37,7 +37,7 @@ void setup() {
 }
 
 void loop() {
-    CAR::update(false);
+    CAR::update();
     CAR::showObjects();
     digitalToggleFast(13);
     delay(1);
@@ -73,8 +73,6 @@ void setup() {
     CAR::waitButtonPress();
     CAR::start();
     setVelocity(Geschwindigkeit_normal,0,0.4f,-0.4f);
-    update();
-    showSensorData(true);
     bereich_eng[0] = ((getDistance(FrontLeft) + getDistance(FrontRight)) > 750) + 1;
     
     while(true){
@@ -139,29 +137,31 @@ void loop() {
         while(getRotation()+Korektur > (((richtung == 0)?90:-90)*anzahl_Kurven)-5.0f){
             update();
         }
+        if(zeit + 800 < millis()) zeit = millis()-800;
     }
     else if((getDistance(FrontRight) < 150)&&(getDistance(FrontCenter) > 800)){
         setServo(gegensteuern_wand_degree);
         while(getRotation()+Korektur < (((richtung == 0)?90:-90)*anzahl_Kurven)+5.0f){
             update();
         }
+        if(zeit + 800 < millis()) zeit = millis()-800;
     }
     setServo(((getRotation()+Korektur) - ((richtung)?(anzahl_Kurven * -90):(anzahl_Kurven*90)))*((-gegensteuern_multiplikator)));
     if(bereich_eng[anzahl_Kurven % 4] == 0) if(getDistance(RearCenter) > 1200 && (abs(abs(getRotation()) - (anzahl_Kurven*90)) < 5)){
         if((getDistance(FrontLeft)+getDistance(FrontRight)) < 750) bereich_eng[anzahl_Kurven % 4] = 1;
         else bereich_eng[anzahl_Kurven % 4] = 2;
     }
-    if(boost &&((getDistance(RearCenter) > (((bereich_eng[(anzahl_Kurven+1)%4] == 1))?1750:1900))) && (zeit + 500 < millis())){
+    if(boost &&((getDistance(RearCenter) > (((bereich_eng[(anzahl_Kurven+1)%4] == 1))?1800:2050))) && (zeit + 500 < millis())){
         setVelocity(Geschwindigkeit_normal,0,0.2f,-0.3f);
         boost = false;
     }
-    if(anzahl_Kurven >= 12)if((getDistance(RearCenter)>1150) && (zeit + 400 < millis())){
+    if(anzahl_Kurven >= 12)if((getDistance(RearCenter)>1150) && (zeit + 800 < millis())){
         setServo(0);
         setVelocity(0.0f, 1, 0.3f, -4.0f);
         char output[42];
         sprintf(output, "%d %d %d %d", int(bereich_eng[0]), int(bereich_eng[1]), int(bereich_eng[2]), int(bereich_eng[3]));
         showFinish(output);
-        while(true) update(false);
+        while(true) update();
     }
     /*if(getDistance(FrontCenter)> 1300 && getDistance(RearCenter) > 1300 && zeitkorektur + 4000 < millis() && zeit + 1300 < millis() && (abs((getRotation()+Korektur) + ((richtung)?(anzahl_Kurven * 90):(anzahl_Kurven*-90))) < 3)){
         Korektur = (-(((atan((getDistance(richtung?RearLeft:FrontRight) - getDistance(richtung?FrontLeft:RearRight))/95)*(180/PI))+((richtung)?(anzahl_Kurven * -90):(anzahl_Kurven*90))))-getRotation());
@@ -175,39 +175,141 @@ void loop() {
 #define gegensteuern_wand_degree 30.0f
 #define einlenken_kurve 37.5f
 
+#define Geschwindigkeit_ausparken 0.13f
+#define Geschwindigkeit_normal 0.4f
+#define Geschwindigkeit_langsam 0.25f
+
 bool richtung = 0; //0 nach links abbiegen; 1 nach rechts abbiegen
+bool parkplatz = 0; // parkplatz = 1: Parkplatz am Anfang des Feldes (in Fahrtrichtung)
+
+uint8_t bekannte_Hindernisse[4] = {}; //0unbekannt 1 innen 2 außen
 
 void setup() {
     CAR::init(true);
     CAR::waitButtonPress();
     CAR::start();
-    showSensorData(true);
     richtung = getDistance(FrontRight) > 200;
-    setServo(richtung ? 45.0f : -45.0f);
-    setVelocity(-0.5f);
-    while(richtung ? (getRotation() > -35.0f) : (getRotation() < 35.0f)) update();
+    setServo(richtung ? 50.0f : -50.0f);
+    setVelocity(-Geschwindigkeit_ausparken);
+    while((richtung ? (getRotation() > -30.0f) : (getRotation() < 30.0f))) update();
     setVelocity(0.0f, true);
     setServo(0.0f);
     uint64_t zeit = millis();
-    while(millis() < zeit + 400) update();
-    setServo(richtung ? -45.0f : 45.0f);
-    setVelocity(0.5f);
-    while(richtung ? (getRotation() > -80.0f) : (getRotation() < 80.0f)) update();
+    while(millis() < zeit + 300) update();
+    setServo(richtung ? -50.0f : 50.0f);
+    setVelocity(Geschwindigkeit_ausparken);
+    while(richtung ? (getRotation() > -85.0f) : (getRotation() < 85.0f)) update();
     setVelocity(0.0f, true);
     zeit = millis();
-    while(millis() < zeit + 400) update();
-    setVelocity(0.5f);
+    while(millis() < zeit + 300) update();
+    setVelocity(Geschwindigkeit_ausparken);
     while((getDistance(FrontLeft) < 200) || (getDistance(FrontRight) < 200)){
         setServo((getRotation() - (richtung?-90.0f:90.0f))*((-gegensteuern_multiplikator)));
         update();
     }
-    setServo(richtung ? 45.0f : -45.0f);
-    setVelocity(0.5f);
-    while(richtung ? (getRotation() < -40.0f) : (getRotation() > 40.0f)) update();
-    setVelocity(0.0f, true);
-    zeit = millis();
-    while(millis() < zeit + 400) update();
-    while(true) update();
+    parkplatz = (getDistance(richtung?FrontLeft:FrontRight) > getDistance(richtung?FrontRight:FrontLeft));
+    if(parkplatz){
+        setServo(richtung ? 45.0f : -45.0f);
+        setVelocity(Geschwindigkeit_ausparken);
+        while(richtung ? (getRotation() < -32.0f) : (getRotation() > 32.0f)) update();
+        setVelocity(0.0f, true);
+        zeit = millis();
+        while(millis() < zeit + 300) update();
+        std::vector<OBJECT> Hindernisse = getObjects();
+        bool innen = false;
+        for(OBJECT hindernis:Hindernisse){
+            if((hindernis.c == (richtung?RED:GREEN)) && (hindernis.h > 120)){
+                innen = true;
+                bekannte_Hindernisse[0] = 1;
+            }
+            else if((hindernis.c == (!richtung?RED:GREEN)) && (hindernis.h > 120)){
+                bekannte_Hindernisse[0] = 0;
+            }
+        }
+        if(!innen){
+            setServo(richtung ? 45.0f : -45.0f);
+            setVelocity(Geschwindigkeit_ausparken);
+            while(richtung ? (getRotation() < 15.0f) : (getRotation() > -15.0f)) update();
+            setVelocity(Geschwindigkeit_normal);
+            zeit = millis();
+            while((getDistance(richtung?FrontRight:FrontLeft) < 1000) || (millis() < zeit + 2000)){
+                setServo((getRotation())*((-gegensteuern_multiplikator)));
+                update();
+            }
+        }
+        else{
+            setServo(richtung ? -45.0f : 45.0f);
+            setVelocity(Geschwindigkeit_langsam);
+            while(richtung ? (getRotation() > -80.0f) : (getRotation() < 80.0f)) update();
+            zeit = millis();
+            while((getDistance(FrontCenter) > 300) || (millis() < zeit + 500)){
+                setServo(((getRotation() - (richtung?-90.0f:90.0f)))*((-gegensteuern_multiplikator)));
+                update();
+            }
+            setServo(richtung ? 45.0f : -45.0f);
+            while(richtung ? (getRotation() < -10.0f) : (getRotation() > 10.0f)) update();
+            setVelocity(Geschwindigkeit_normal);
+            zeit = millis();
+            while((getDistance(richtung?FrontRight:FrontLeft) < 1000) || (millis() < zeit + 2000)){
+                setServo((getRotation())*((-gegensteuern_multiplikator)));
+                update();
+            }
+        }
+    }
+    else{
+        setVelocity(0.0f, true);
+        zeit = millis();
+        while(millis() < zeit + 300) update();
+        std::vector<OBJECT> Hindernisse = getObjects();
+        bool innen = false;
+        for(OBJECT hindernis:Hindernisse){
+            if((hindernis.c == (richtung?RED:GREEN)) && (hindernis.h > 200)) {
+                innen = true;
+                bekannte_Hindernisse[0] = 1;
+            }
+            else if((hindernis.c == (!richtung?RED:GREEN)) && (hindernis.h > 200)){
+                bekannte_Hindernisse[0] = 0;
+            }
+        }
+        if(!innen){
+            setVelocity(Geschwindigkeit_ausparken);
+            setServo(richtung ? 45.0f : -45.0f);
+            setVelocity(Geschwindigkeit_ausparken);
+            while(richtung ? (getRotation() <-2.0f) : (getRotation() > 2.0f)) update();
+            setServo(0);
+        }
+        else{
+            setVelocity(Geschwindigkeit_ausparken);
+            zeit=millis();
+            while((getDistance(RearCenter) < 250) || (millis() < zeit + 500)){
+                setServo(((getRotation() - (richtung?-90.0f:90.0f)))*((-gegensteuern_multiplikator)));
+                update();
+            }
+            setServo(richtung ? -40.0f : 40.0f);
+            setVelocity(Geschwindigkeit_langsam);
+            while(richtung ? (getRotation() > -135.0f) : (getRotation() < 135.0f)) update();
+            setServo(richtung ? 40.0f : -40.0f);
+            while(richtung ? (getRotation() < -90.0f) : (getRotation() > 90.0f)) update();
+            zeit=millis();
+            while((getDistance(FrontCenter) > 300) || (millis() < zeit + 500)){
+                setServo(((getRotation() - (richtung?-90.0f:90.0f)))*((-gegensteuern_multiplikator)));
+                update();
+            }
+            setServo(richtung ? 45.0f : -45.0f);
+            while(richtung ? (getRotation() < -10.0f) : (getRotation() > 10.0f)) update();
+            setVelocity(Geschwindigkeit_langsam);
+            zeit = millis();
+            while((getDistance(richtung?FrontRight:FrontLeft) < 1000) || (millis() < zeit + 1000)){
+                setServo((getRotation())*((-gegensteuern_multiplikator)));
+                update();
+            }
+        }
+    }
+    setVelocity(0.0f,true);
+    while(true){
+        CAR::update();
+        CAR::showObjects();
+    }
 }
 
 void loop() {

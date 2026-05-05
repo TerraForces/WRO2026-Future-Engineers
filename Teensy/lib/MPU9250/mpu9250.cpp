@@ -46,6 +46,7 @@ bool MPU9250::getRotation(float* rotation) {
     long quat[4];
     unsigned long timestamp;
     unsigned char more;
+    if(dmp_read_fifo(gyro, accel, quat, &timestamp, &sensors, &more)) return false;
     while(!dmp_read_fifo(gyro, accel, quat, &timestamp, &sensors, &more));
     float a0 = qToFloat(quat[0]);
     float a1 = qToFloat(quat[1]);

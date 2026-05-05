@@ -15,7 +15,7 @@
 
 struct TCS3472 {
     TCS3472(I2C *i2c, uint8_t address = 0x29);
-    bool begin(bool interrupts = false);
+    bool begin();
     bool readColor(void* color, bool includeC = true);
 private:
     I2C *_i2c;

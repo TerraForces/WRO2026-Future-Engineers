@@ -53,7 +53,7 @@ namespace CAR {
 
     // TCS3472 color values
     struct COLOR16 {
-        uint16_t r, g, b, c;
+        uint16_t c, r, g, b;
     };
 
     // reads battery voltage
@@ -147,8 +147,7 @@ namespace CAR {
     void start();
 
     // updates drive speed and distance and rotation data - has to be called freqently
-    // @param showData show sensor data after update (needs additionally 20 ms)
-    void update(bool showData = true);
+    void update();
 
     // waits until the start button is pressed (blocking) - activates LED while waiting
     void waitButtonPress();
