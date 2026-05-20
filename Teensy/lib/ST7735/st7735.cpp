@@ -9,65 +9,6 @@
 // include header file
 #include "st7735.hpp"
 
-#define ST_CMD_DELAY 0x80 // special signifier for command lists
-
-#define ST77XX_NOP 0x00
-#define ST77XX_SWRESET 0x01
-#define ST77XX_RDDID 0x04
-#define ST77XX_RDDST 0x09
-
-#define ST77XX_SLPIN 0x10
-#define ST77XX_SLPOUT 0x11
-#define ST77XX_PTLON 0x12
-#define ST77XX_NORON 0x13
-
-#define ST77XX_INVOFF 0x20
-#define ST77XX_INVON 0x21
-#define ST77XX_DISPOFF 0x28
-#define ST77XX_DISPON 0x29
-#define ST77XX_CASET 0x2A
-#define ST77XX_RASET 0x2B
-#define ST77XX_RAMWR 0x2C
-#define ST77XX_RAMRD 0x2E
-
-#define ST77XX_PTLAR 0x30
-#define ST77XX_TEOFF 0x34
-#define ST77XX_TEON 0x35
-#define ST77XX_MADCTL 0x36
-#define ST77XX_COLMOD 0x3A
-
-#define ST77XX_MADCTL_MY 0x80
-#define ST77XX_MADCTL_MX 0x40
-#define ST77XX_MADCTL_MV 0x20
-#define ST77XX_MADCTL_ML 0x10
-#define ST77XX_MADCTL_RGB 0x00
-
-#define ST77XX_RDID1 0xDA
-#define ST77XX_RDID2 0xDB
-#define ST77XX_RDID3 0xDC
-#define ST77XX_RDID4 0xDD
-
-#define ST7735_MADCTL_BGR 0x08
-#define ST7735_MADCTL_MH 0x04
-
-#define ST7735_FRMCTR1 0xB1
-#define ST7735_FRMCTR2 0xB2
-#define ST7735_FRMCTR3 0xB3
-#define ST7735_INVCTR 0xB4
-#define ST7735_DISSET5 0xB6
-
-#define ST7735_PWCTR1 0xC0
-#define ST7735_PWCTR2 0xC1
-#define ST7735_PWCTR3 0xC2
-#define ST7735_PWCTR4 0xC3
-#define ST7735_PWCTR5 0xC4
-#define ST7735_VMCTR1 0xC5
-
-#define ST7735_PWCTR6 0xFC
-
-#define ST7735_GMCTRP1 0xE0
-#define ST7735_GMCTRN1 0xE1
-
 static const uint8_t PROGMEM
 Rcmd1[] = {                 // 7735R init, part 1 (red or green tab)
     15,                     // 15 commands in list:
@@ -134,7 +75,7 @@ Rcmd3[] = {                 // 7735R init, part 3 (red or green tab)
 };
 SPISettings settings = SPISettings(32000000, MSBFIRST, SPI_MODE0);
 
-ST7735::ST7735(SPIClass *spi, uint8_t cs, uint8_t dc, uint8_t rst, bool landscape, bool blockBus) : _spi(spi), _cs(cs), _dc(dc), _rst(rst), _w(landscape ? 160 : 128), _h(landscape ? 128 : 160), _blockBus(blockBus) {}
+ST7735::ST7735(SPIClass *spi, uint8_t cs, uint8_t dc, uint8_t rst, bool landscape) : _spi(spi), _cs(cs), _dc(dc), _rst(rst), _w(landscape ? 160 : 128), _h(landscape ? 128 : 160) {}
 
 void ST7735::begin(bool r180) {
     digitalWriteFast(_cs, HIGH);
@@ -320,8 +261,8 @@ void ST7735::displayInit(const uint8_t *addr) {
     while (numCommands--) {              // For each command...
         cmd = *(addr++);       // Read command
         numArgs = *(addr++);   // Number of args to follow
-        ms = numArgs & ST_CMD_DELAY;       // If hibit set, delay follows args
-        numArgs &= ~ST_CMD_DELAY;          // Mask out delay bit
+        ms = numArgs & 0x80;       // If hibit set, delay follows args
+        numArgs &= ~0x80;          // Mask out delay bit
         sendCommand(cmd, addr, numArgs);
         addr += numArgs;
         if (ms) {
@@ -344,19 +285,19 @@ void ST7735::sendCommand(uint8_t commandByte, const uint8_t *dataBytes, uint8_t 
 }
 
 void ST7735::setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    writeCommand(ST77XX_CASET);
+    writeCommand(0x2A);
     _spi->transfer(x >> 8);
     _spi->transfer(x);
     uint16_t a = x + w - 1;
     _spi->transfer(a >> 8);
     _spi->transfer(a);
-    writeCommand(ST77XX_RASET);
+    writeCommand(0x2B);
     _spi->transfer(y >> 8);
     _spi->transfer(y);
     uint16_t b = y + h - 1;
     _spi->transfer(b >> 8);
     _spi->transfer(b);
-    writeCommand(ST77XX_RAMWR);
+    writeCommand(0x2C);
 }
 
 inline void ST7735::writeCommand(uint8_t command) {
