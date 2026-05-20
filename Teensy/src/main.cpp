@@ -8,7 +8,7 @@
 
 // select program
 #define TEST
-#define OBJECTS
+//#define OBJECTS
 
 #include "car.hpp"
 
@@ -55,7 +55,7 @@ using namespace CAR;
 #define einlenken_kurve 35.0f
 #define kurvenEnde 45.0f
 
-#define Geschwindigkeit_normal 0.85f
+#define Geschwindigkeit_normal 0.8f
 #define Geschwindigkeit_Boost 1.0f
 
 bool richtung; //0nach links abbiegen, 1 nach rechts abbiegen
@@ -118,7 +118,7 @@ float Korektur = 0;
 
 void loop() {
     update();
-    if(Kurve != 1 && zeit + 1300 < millis())if((((richtung == 0)&&(getDistance(FrontLeft) > 800))||((richtung == 1)&&(getDistance(FrontRight) > 800))||(getDistance(FrontCenter) < ((bereich_eng[anzahl_Kurven % 4] == 2)?450:350)))&&(getDistance(RearCenter) > 1700)&&((getRotation()+Korektur) + ((richtung)?(anzahl_Kurven * 90):(anzahl_Kurven*-90)) < 7)) Kurve = 1;
+    if(Kurve != 1 && zeit + 900 < millis())if((((richtung == 0)&&(getDistance(FrontLeft) > 800))||((richtung == 1)&&(getDistance(FrontRight) > 800))||(getDistance(FrontCenter) < ((bereich_eng[anzahl_Kurven % 4] == 2)?600:450)))&&(getDistance(RearCenter) > 1700)&&((getRotation()+Korektur) + ((richtung)?(anzahl_Kurven * 90):(anzahl_Kurven*-90)) < 7)) Kurve = 1;
     if(Kurve == 1){
         setVelocity(Geschwindigkeit_normal, 0, 0.2f,-0.4f);
         anzahl_Kurven++;

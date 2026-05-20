@@ -17,23 +17,30 @@ enum COLORS : uint8_t {
 
 // description of detected objects
 struct OBJECT {
-    uint16_t l; // left x position of the bounding rect in image pixels (0 - 1295)
-    uint16_t r; // right x position of the bounding rect in image pixels (0 - 1295)
-    uint16_t t; // top y position of the bounding rect in image pixels (0 - 1295)
-    uint16_t b; // bottom y position of the bounding rect in image pixels (0 - 1295)
+    uint16_t x; // x position of the bounding rect in image pixels (0 - 1295)
+    uint16_t y; // y position of the bounding rect in image pixels (0 - 1295)
     uint16_t w; // bounding rect width in image pixels (0 - 1295)
     uint16_t h; // bounding rect height in image pixels (0 - 1295)
     uint16_t c; // object color (see possible object colors above)
     uint16_t p; // detection probability in 0.1% (0 - 1000)
 };
 
+void logStr(const char* str) {
+    FILE* file = fopen("log.txt", "a");
+    fprintf(file, str);
+    fclose(file);
+}
+
 // program start
 int main() {
+    logStr("0");
 
     // configure and start UART bus at 115200 bits per second
     int32_t uart = open("/dev/ttyAMA0", O_RDWR);
+    logStr("1");
     termios tty;
     tcgetattr(uart, &tty);
+    logStr("2");
     tty.c_cflag &= ~PARENB;
     tty.c_cflag &= ~CSTOPB;
     tty.c_cflag &= ~CSIZE;
@@ -51,12 +58,26 @@ int main() {
     tty.c_oflag &= ~ONLCR;
     tty.c_cc[VTIME] = 10;
     tty.c_cc[VMIN] = 0;
-    cfsetispeed(&tty, B115200);
-    cfsetospeed(&tty, B115200);
+    cfsetispeed(&tty, B500000);
+    cfsetospeed(&tty, B500000);
+    logStr("3");
     tcsetattr(uart, TCSANOW, &tty);
+    logStr("4");
+
+    // send ready packet
+    uint32_t buf = 0x12345678;
+    write(uart, &buf, sizeof(buf));
+    logStr("5");
+
+    // wait for start signal
+    buf = 0;
+    while(read(uart, &buf, sizeof(buf)) <= 0);
+    if(buf == 0x12345678) logStr("6");
+    else logStr("X");
 
     // start camera + inference pipeline and capture output (command is using error output for logging)
     ipstream pipe("rpicam-hello --framerate 50 --hflip --vflip --post-process-file ~/Documents/hailo_yolo11s.json -n -t 0 -v --width 1296 --height 1296", pstreams::pstderr);
+    logStr("7");
     
     // read output lines and extract important data
     std::string line;
@@ -71,7 +92,7 @@ int main() {
                 std::sort(objects.begin(), objects.end(),
                     [](OBJECT l, OBJECT r) {
                         if((l.c == PINK) != (r.c == PINK)) return r.c == PINK;
-                        return l.b > r.b;
+                        return (l.y + l.h) > (r.y + r.h);
                     }
                 );
             }
@@ -97,10 +118,8 @@ int main() {
 
             // calculate normalized position data
             OBJECT object = {};
-            object.l = width >= 0 ? x : x + width;
-            object.r = width >= 0 ? x + width : x;
-            object.t = height >= 0 ? y : y + height;
-            object.b = height >= 0 ? y + height : y;
+            object.x = width >= 0 ? x : x + width;
+            object.y = height >= 0 ? y : y + height;
             object.w = width >= 0 ? width : -width;
             object.h = height >= 0 ? height : -height;
 

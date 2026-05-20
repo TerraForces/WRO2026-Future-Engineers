@@ -68,7 +68,7 @@ constexpr uint16_t Color_Best_Bars  = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_Diff_Neg   = RGB565(0x90, 0x00, 0x00);
 constexpr uint16_t Color_Diff_Pos   = RGB565(0xFF, 0x00, 0x00);
 constexpr uint16_t Color_Error      = RGB565(0xFF, 0x00, 0x00);
-constexpr uint16_t Colors_Objects[] = { RGB565(0xFF, 0x00, 0x00), RGB565(0x00, 0xFF, 0x00), RGB565(0xFF, 0x00, 0xFF) };
+constexpr uint16_t Colors_Objects[] = { RGB565(0xDD, 0x00, 0x00), RGB565(0x00, 0xDD, 0x00), RGB565(0xDD, 0x00, 0xDD) };
 constexpr uint16_t Color_Outlines   = RGB565(0x50, 0x50, 0x50);
 constexpr uint16_t Color_Running    = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_SD_Bar     = RGB565(0x00, 0x00, 0xFF);
@@ -80,6 +80,7 @@ constexpr uint8_t  Config_DS18B20_Conv_Addr[8]   = { 0x28, 0x61, 0x64, 0x0a, 0x5
 constexpr uint8_t  Config_DS18B20_MOSFET_Addr[8] = { 0x28, 0x61, 0x64, 0x0a, 0x4a, 0x1c, 0xf7, 0xf2 };
 constexpr float    Config_Drive_PWM_Freq         = 2959.955f;
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000; // us
+constexpr uint32_t Config_RPI5_Startup_Millis    = 40000;
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;
 constexpr uint16_t Config_Servo_Center_Duty      = 33027;
 constexpr float    Config_Servo_Max_Angle        = 50.0f;
@@ -113,6 +114,7 @@ bool sensorWarning[10] = {};
 bool rpiActive = false;
 uint32_t startTime = 0;
 uint8_t uartReadBuffer[50000] = {};
+uint32_t buf = 0;
 
 float CAR::getBatteryVoltage() {
     return analogRead(Pin_ADC_Battery) * 0.002519843f;
@@ -219,6 +221,9 @@ void CAR::init(bool rpi5) {
     digitalWriteFast(38, LOW);
     digitalWriteFast(41, LOW);
 
+    // record RPI5 max startup time
+    uint32_t rpiTime = millis() + Config_RPI5_Startup_Millis;
+
     // configure ADC channels
     analogReadAveraging(16);
     analogReadRes(12);
@@ -235,7 +240,7 @@ void CAR::init(bool rpi5) {
 
     // start display
     lcd.begin();
-    lcd.fillScreen(0);
+    lcd.fillScreen(Color_Background);
 
     // start I2C systems
     i2c0.begin(400000);
@@ -275,17 +280,27 @@ void CAR::init(bool rpi5) {
     sensorActive[8] = tcs3472.begin();
 
     if(rpi5) {
-        // wait for Raspberry Pi 5 to finish booting
+        // start UART
         Serial7.addMemoryForRead(uartReadBuffer, sizeof(uartReadBuffer));
         Serial7.begin(500000, SERIAL_8N1);
-        while(Serial7.available() < (int)sizeof(CAR::OBJECT)) yield();
+
+        // wait for RPI5
+        while(Serial7.available() < (int)sizeof(buf)) {
+            if(millis() > rpiTime) {
+                digitalWriteFast(Pin_RPI5_PWR, LOW);
+                delay(2000);
+                digitalWriteFast(Pin_RPI5_PWR, HIGH);
+                Serial7.clear();
+                rpiTime = millis() + Config_RPI5_Startup_Millis;
+            }
+            yield();
+        }
+        Serial7.readBytes((uint8_t*)&buf, sizeof(buf));
         rpiActive = true;
     }
-    else {
-        // show battery voltage
-        lastVoltage = getBatteryVoltage();
-        setLEDs(CAR::COLOR8 { (uint8_t)(255 * (lastVoltage > 7.2f)), (uint8_t)(255 * (lastVoltage < 7.8f)), 0 });
-    }
+    lcd.drawText(4, 4, font5x7, "ready", Color_Text, Color_Background, 2);
+    lcd.drawText(4, 24, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
+    lcd.drawText(4, 44, font5x7, (String(getBatteryVoltage(), 2) + " V").c_str(), Color_Text, Color_Background, 2);
 }
 
 void CAR::logSD(String str) {
@@ -540,6 +555,11 @@ void CAR::showSensorData(bool complete) {
 }
 
 void CAR::start() {
+
+    if(rpiActive) {
+        // start object detection
+        Serial7.write((uint8_t*)&buf, sizeof(buf));
+    }
 
     // set rotation offset
     while(!imu.getRotation(&lastRotation)) delay(1);
