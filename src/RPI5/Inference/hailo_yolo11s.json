@@ -11,7 +11,7 @@
 
     "hailo_yolo_inference":
     {
-        "hef_file": "~/Documents/yolov11s.hef",
+        "hef_file": "~/Documents/yolo11s.hef",
         "max_detections": 100,
         "threshold": 0.5
     }
