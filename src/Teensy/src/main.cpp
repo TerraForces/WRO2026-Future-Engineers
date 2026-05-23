@@ -50,10 +50,10 @@ using namespace CAR;
 
 #ifndef OBJECTS
 
-#define gegensteuern_multiplikator 0.15f
+#define gegensteuern_multiplikator 0.25f
 #define gegensteuern_wand_degree 10.0f
 #define einlenken_kurve 35.0f
-#define kurvenEnde 45.0f
+#define kurvenEnde 37.5f
 
 #define Geschwindigkeit_normal 0.8f
 #define Geschwindigkeit_Boost 1.0f
@@ -77,13 +77,13 @@ void setup() {
     
     while(true){
         update();
-        if((abs(getRotation()) < 5)||(getDistance(FrontCenter) < 300)){
-            if(getDistance(FrontLeft) > 1000){
+        if((abs(getRotation()) < 5)||(getDistance(FrontCenter) < 400)){
+            if(getDistance(FrontLeft) > 800){
                 Kurve = 1;
                 richtung = 0;
                 break;
             }
-            else if(getDistance(FrontRight) > 1000){
+            else if(getDistance(FrontRight) > 800){
                 Kurve = 1;
                 richtung = 1;
                 break;
@@ -97,7 +97,7 @@ void setup() {
                 break;
             }*/
         }
-        if(getDistance(FrontLeft) < 150){
+        else if(getDistance(FrontLeft) < 150){
             setServo(-gegensteuern_wand_degree);
             while(getRotation() > -7.0f){
                 update();
@@ -118,7 +118,7 @@ float Korektur = 0;
 
 void loop() {
     update();
-    if(Kurve != 1 && zeit + 900 < millis())if((((richtung == 0)&&(getDistance(FrontLeft) > 800))||((richtung == 1)&&(getDistance(FrontRight) > 800))||(getDistance(FrontCenter) < ((bereich_eng[anzahl_Kurven % 4] == 2)?600:450)))&&(getDistance(RearCenter) > 1700)&&((getRotation()+Korektur) + ((richtung)?(anzahl_Kurven * 90):(anzahl_Kurven*-90)) < 7)) Kurve = 1;
+    if(Kurve != 1 && zeit + 1300 < millis())if((((richtung == 0)&&(getDistance(FrontLeft) > 800))||((richtung == 1)&&(getDistance(FrontRight) > 800))||(getDistance(FrontCenter) < ((bereich_eng[anzahl_Kurven % 4] == 2)?450:350)))&&(getDistance(RearCenter) > 1700)&&((getRotation()+Korektur) + ((richtung)?(anzahl_Kurven * 90):(anzahl_Kurven*-90)) < 7)) Kurve = 1;
     if(Kurve == 1){
         setVelocity(Geschwindigkeit_normal, 0, 0.2f,-0.4f);
         anzahl_Kurven++;
@@ -593,13 +593,14 @@ void setup() {
         setServo(((getRotation() - (anzahl_Kurven*(richtung?-90.0f:90.0f))))*((-gegensteuern_multiplikator*2)));
         update();
     }
+    setVelocity(0.0f,true);
 
     if(bekannte_Hindernisse[0] == 2){
         if(parkplatz){
             setVelocity(-Geschwindigkeit_ausparken);
             letzte_messung = getDistance(richtung?(FrontLeft):(FrontRight));
             vorletzte_messung = getDistance(richtung?(FrontLeft):(FrontRight));
-            while((getDistance(richtung?(FrontLeft):(FrontRight)) < letzte_messung + 20)&&(getDistance(richtung?(FrontLeft):(FrontRight)) < vorletzte_messung + 20)){
+            while((getDistance(richtung?(FrontLeft):(FrontRight)) < letzte_messung + 40)&&(getDistance(richtung?(FrontLeft):(FrontRight)) < vorletzte_messung + 40)){
                 update();
                 setServo(((getRotation() - (anzahl_Kurven*(richtung?-90.0f:90.0f))))*((gegensteuern_multiplikator*2)));
                 if(getDistance(richtung?(FrontLeft):(FrontRight)) != letzte_messung){
@@ -620,7 +621,7 @@ void setup() {
             setVelocity(Geschwindigkeit_ausparken);
             letzte_messung = getDistance(richtung?(RearLeft):(RearRight));
             vorletzte_messung = getDistance(richtung?(RearLeft):(RearRight));
-            while((getDistance(richtung?(RearLeft):(RearRight)) < letzte_messung + 20)&&(getDistance(richtung?(RearLeft):(RearRight)) < vorletzte_messung + 20)){
+            while((getDistance(richtung?(RearLeft):(RearRight)) < letzte_messung + 40)&&(getDistance(richtung?(RearLeft):(RearRight)) < vorletzte_messung + 40)){
                 update();
                 setServo(((getRotation() - (anzahl_Kurven*(richtung?-90.0f:90.0f))))*((-gegensteuern_multiplikator*2)));
                 if(getDistance(richtung?(RearLeft):(RearRight)) != letzte_messung){
@@ -690,7 +691,7 @@ void setup() {
             setVelocity(-Geschwindigkeit_ausparken);
             letzte_messung = getDistance(richtung?(FrontLeft):(FrontRight));
             vorletzte_messung = getDistance(richtung?(FrontLeft):(FrontRight));
-            while((getDistance(richtung?(FrontLeft):(FrontRight)) < letzte_messung + 20)&&(getDistance(richtung?(FrontLeft):(FrontRight)) < vorletzte_messung + 20)){
+            while((getDistance(richtung?(FrontLeft):(FrontRight)) < letzte_messung + 40)&&(getDistance(richtung?(FrontLeft):(FrontRight)) < vorletzte_messung + 40)){
                 update();
                 setServo(((getRotation() - (anzahl_Kurven*(richtung?-90.0f:90.0f))))*((gegensteuern_multiplikator*2)));
                 if(getDistance(richtung?(FrontLeft):(FrontRight)) != letzte_messung){
@@ -711,7 +712,7 @@ void setup() {
             setVelocity(Geschwindigkeit_ausparken);
             letzte_messung = getDistance(richtung?(RearLeft):(RearRight));
             vorletzte_messung = getDistance(richtung?(RearLeft):(RearRight));
-            while((getDistance(richtung?(RearLeft):(RearRight)) < letzte_messung + 20)&&(getDistance(richtung?(RearLeft):(RearRight)) < vorletzte_messung + 20)){
+            while((getDistance(richtung?(RearLeft):(RearRight)) < letzte_messung + 40)&&(getDistance(richtung?(RearLeft):(RearRight)) < vorletzte_messung + 40)){
                 update();
                 setServo(((getRotation() - (anzahl_Kurven*(richtung?-90.0f:90.0f))))*((-gegensteuern_multiplikator*2)));
                 if(getDistance(richtung?(RearLeft):(RearRight)) != letzte_messung){
