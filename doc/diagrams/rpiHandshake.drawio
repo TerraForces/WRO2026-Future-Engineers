@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="Page-1" id="ZlV1zq2svIWMXBiMGzog">
-    <mxGraphModel dx="685" dy="400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="2054" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -22,10 +22,10 @@
         <mxCell id="fd2CI9dsX6aj3rATc0ho-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontSize=11;fontFamily=Ubuntu Sans;fontStyle=1" value="Raspberry Pi 5" vertex="1">
           <mxGeometry height="10" width="120" x="360" y="60" as="geometry" />
         </mxCell>
-        <mxCell id="fd2CI9dsX6aj3rATc0ho-7" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Bereitschaftspacket an Teensy 4.1 senden" vertex="1">
+        <mxCell id="fd2CI9dsX6aj3rATc0ho-7" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Bereitschaftspa&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;ket an Teensy 4.1 senden&lt;/span&gt;" vertex="1">
           <mxGeometry height="30" width="120" x="360" y="130" as="geometry" />
         </mxCell>
-        <mxCell id="fd2CI9dsX6aj3rATc0ho-8" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Bereitschaftspacket empfangen" vertex="1">
+        <mxCell id="fd2CI9dsX6aj3rATc0ho-8" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Bereitschaftspaket empfangen" vertex="1">
           <mxGeometry height="30" width="120" x="200" y="130" as="geometry" />
         </mxCell>
         <mxCell id="fd2CI9dsX6aj3rATc0ho-9" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;dashed=0;size=0.125;fontSize=11;fontFamily=Ubuntu Sans;" value="LED am Taster an" vertex="1">
@@ -70,10 +70,10 @@
             <mxPoint x="270" y="20" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="fd2CI9dsX6aj3rATc0ho-17" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Startpacket an Raspberry Pi senden" vertex="1">
+        <mxCell id="fd2CI9dsX6aj3rATc0ho-17" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Startpaket an Raspberry Pi senden" vertex="1">
           <mxGeometry height="30" width="120" x="200" y="180" as="geometry" />
         </mxCell>
-        <mxCell id="fd2CI9dsX6aj3rATc0ho-18" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Startpacket&lt;div&gt;empfangen&lt;/div&gt;" vertex="1">
+        <mxCell id="fd2CI9dsX6aj3rATc0ho-18" parent="1" style="html=1;dashed=0;whiteSpace=wrap;fontSize=11;fontFamily=Ubuntu Sans;" value="Startpaket&lt;div&gt;empfangen&lt;/div&gt;" vertex="1">
           <mxGeometry height="30" width="120" x="360" y="180" as="geometry" />
         </mxCell>
         <mxCell id="fd2CI9dsX6aj3rATc0ho-19" edge="1" parent="1" source="fd2CI9dsX6aj3rATc0ho-15" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="fd2CI9dsX6aj3rATc0ho-17" value="">
