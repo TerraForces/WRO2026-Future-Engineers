@@ -82,7 +82,7 @@ constexpr float    Config_Drive_PWM_Freq         = 2959.955f;
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000; // us
 constexpr uint32_t Config_RPI5_Startup_Millis    = 40000;
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;
-constexpr uint16_t Config_Servo_Center_Duty      = 33027;
+constexpr uint16_t Config_Servo_Center_Duty      = 33033;
 constexpr float    Config_Servo_Max_Angle        = 50.0f;
 constexpr bool     Config_VL53L1X_LongMode[8]    = { 1, 1, 1, 1, 1, 1, 1, 1 };
 

@@ -18,9 +18,12 @@
 void setup() {
     CAR::init();
     CAR::waitButtonPress();
-    //CAR::runCalibration(0, 20000, 16);
+    CAR::runCalibration(50, 30000, 16);
     CAR::start();
     CAR::showSensorData(true);
+    /*CAR::setServo(0.0f);
+    delay(500);
+    CAR::setVelocity(0.3f);*/
 }
 
 void loop() {
@@ -105,13 +108,13 @@ void setup() {
         if((abs(getRotation()) < 5.0f) || (getDistance(FrontCenter) < 400)) {
 
             // detect open space on the left
-            if(getDistance(FrontLeft) > 800) {
+            if(getDistance(FrontLeft) > 1000) {
                 direction = 0;
                 break;
             }
 
             // detect open space on the right
-            else if(getDistance(FrontRight) > 800) {
+            else if(getDistance(FrontRight) > 1000) {
                 direction = 1;
                 break;
             }
@@ -196,11 +199,11 @@ void loop() {
 // functions to detect whether a line of this color is visible below the color sensor
 bool onOrangeLine() {
     CAR::COLOR16 color = CAR::getColor();
-    return color.r > (color.b * 2.625f);
+    return color.r > (color.b * 2.5f);
 }
 bool onBlueLine() {
     CAR::COLOR16 color = CAR::getColor();
-    return color.b > (color.r * 1.1f);
+    return color.b > color.r;
 }
 
 // angle configuration
@@ -210,7 +213,7 @@ constexpr float wallReactionAngle       = 10.0f;
 constexpr float wallReactionTargetAngle = 6.0f;
 
 // distance configuration
-constexpr uint16_t parkingSpaceDetectionThreshold = 60;
+constexpr uint16_t parkingSpaceDetectionThreshold = 65;
 constexpr uint16_t wallReactionDistance           = 100;
 
 // speed configuration
@@ -274,7 +277,7 @@ void setup() {
     CAR::start();
 
     // adjust park speed accoding to battery voltage
-    parkSpeed = 0.14f + ((8.4f - getBatteryVoltage()) * 0.067f);
+    parkSpeed = 0.17f + ((8.4f - getBatteryVoltage()) * 0.06f);
 
     // detect driving direction
     direction = getDistance(FrontRight) > 200;
@@ -306,7 +309,10 @@ void setup() {
     }
 
     // detect parking space position
-    parkingSpace = getDistance(direction ? FrontLeft : FrontRight) > getDistance(direction ? FrontRight : FrontLeft);
+    uint16_t d0 = getDistance(direction ? FrontLeft : FrontRight);
+    uint16_t d1 = getDistance(direction ? FrontRight : FrontLeft);
+    wait(100);
+    parkingSpace = (getDistance(direction ? FrontLeft : FrontRight) + d0) > (getDistance(direction ? FrontRight : FrontLeft) + d1);
 
     if(parkingSpace) {
         setServo(direction ? 45.0f : -45.0f);
@@ -390,6 +396,8 @@ void setup() {
     setVelocity(0.0f, true);
 
     while(curveCount < 11) {
+
+        // first round
         if(knownObstacles[(curveCount + 1) & 3] == 0) {
             if(nearInnerBorder) {
                 while((getDistance(FrontCenter) > 925) && (getDistance(direction ? RearRight : RearLeft) < 1000)) {
@@ -418,7 +426,7 @@ void setup() {
             }
             else {
                 setVelocity(slowSpeed);
-                while((getDistance(FrontCenter) > 925) && (getDistance(direction ? RearRight : RearLeft) < 1000)) {
+                while((getDistance(FrontCenter) > 940) && (getDistance(direction ? RearRight : RearLeft) < 1100)) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * (-reactionFactor));
                     update();
                 }
@@ -465,7 +473,7 @@ void setup() {
                 while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
                 setVelocity(fastSpeed);
                 timestamp = millis();
-                while((getDistance(FrontCenter) > 1400) || (millis() < (timestamp + 200))) {
+                while((getDistance(FrontCenter) > 1500) || (millis() < (timestamp + 200))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     wallCorrection();
                 }
@@ -474,7 +482,7 @@ void setup() {
                 while((timestamp + 15) > millis()) update();
                 setVelocity(slowSpeed);
                 timestamp = millis();
-                while((getDistance(direction ? FrontRight : FrontLeft) < 1000) || (getDistance(FrontCenter) > 940) || (millis() < (timestamp + 100))) {
+                while((getDistance(direction ? FrontRight : FrontLeft) < 1000) || (getDistance(FrontCenter) > 1400) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -485,7 +493,7 @@ void setup() {
                 setServo(direction ? 45.0f : -45.0f);
                 while(direction ? (getRotation() < ((curveCount * -90.0f) + 85.0f)) : (getRotation() > ((curveCount * 90.0f) - 85.0f))) update();
                 timestamp = millis();
-                while((getDistance(FrontCenter) > (((curveCount & 3) == 0) ? 550 : 200)) || (millis() < (timestamp + 200))) {
+                while((getDistance(FrontCenter) > (((curveCount & 3) == 0) ? 550 : 260)) || (millis() < (timestamp + 200))) {
                     setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -494,7 +502,7 @@ void setup() {
                 while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
                 setVelocity(fastSpeed);
                 timestamp = millis();
-                while((getDistance(FrontCenter) > 1500) || (millis() < (timestamp + 2000))) {
+                while((getDistance(FrontCenter) > 1500) || (millis() < (timestamp + 800))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     wallCorrection();
                 }
@@ -503,16 +511,18 @@ void setup() {
                 while((timestamp + 15) > millis()) update();
                 setVelocity(slowSpeed);
                 timestamp = millis();
-                while((getDistance(direction ? FrontRight : FrontLeft) < 1500) || (getDistance(FrontCenter) > 1000) || (millis() < (timestamp + 500))) {
+                while((getDistance(direction ? FrontRight : FrontLeft) < 1200) || (getDistance(FrontCenter) > 1400) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
             }
         }
+
+        // second and third round
         else {
             if(knownObstacles[(curveCount + 1) & 3] == 2) {
                 timestamp = millis();
-                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 500 : 250)) || (millis() < (timestamp + 100))) {
+                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 500 : 280)) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -530,13 +540,13 @@ void setup() {
             while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
             setVelocity(fastSpeed);
             timestamp = millis();
-            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1400 : 800)) || (millis() < (timestamp + 2500))) {
+            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1500 : 1000)) || (millis() < (timestamp + 800))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 wallCorrection();
             }
             setVelocity(slowSpeed, false, 0.25f, -4.0f);
             timestamp = millis();
-            while(((getDistance(direction ? FrontRight : FrontLeft) < 1300) || (getDistance(FrontCenter) > 1300)) || (millis() < (timestamp + 200))) {
+            while(((getDistance(direction ? FrontRight : FrontLeft) < 1300) || (getDistance(FrontCenter) > 1400)) || (millis() < (timestamp + 100))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 update();
             }
@@ -632,10 +642,11 @@ void setup() {
                 }
             }
             setVelocity(0.0f,true);
-            timestamp=millis();
-            while(timestamp + 250 > millis())update();
+            setServo(0);
+            wait(250);
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed);
+            setVelocity(-parkSpeed,0,1,5);
+            wait(450);
             while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
             setServo(0.0f);
             while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
@@ -657,14 +668,13 @@ void setup() {
         setServo(direction ? -50.0f : 50.0f);
         setVelocity(parkSpeed);
         while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > 5.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 5.0f))) update();
-        timestamp=millis();
         setVelocity(0.0f,true);
-        while(timestamp+250 > millis())update();
+        wait(250);
         setServo(0);
         setVelocity(-slowSpeed);
         timestamp=millis();
         setServo(0);
-        while((timestamp + 250 > millis())||(getDistance(FrontCenter) < ((parkingSpace)?1400:1700))){
+        while((timestamp + 700 > millis())||(getDistance(FrontCenter) < ((parkingSpace)?1400:1800))){
             update();
             setServo(((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
         }
@@ -713,11 +723,12 @@ void setup() {
                 }
             }
             setVelocity(0.0f,true);
-            timestamp=millis();
-            while(timestamp + 250 > millis())update();
+            setServo(0);
+            wait(250);
 
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed);
+            setVelocity(-parkSpeed,0,1,5);
+            wait(450);
             while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
             setServo(0.0f);
             while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
