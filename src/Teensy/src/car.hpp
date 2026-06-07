@@ -24,7 +24,7 @@ namespace CAR {
         PINK   // pink parking space borders
     };
 
-    // VL53L1X sensor positions (ordered counterclockwise)
+    // VL53L1X sensor positions (ordered counterclockwise) and other sensors
     enum SENSORS : uint8_t {
         FrontCenter,
         AngledLeft,
@@ -33,7 +33,11 @@ namespace CAR {
         RearCenter,
         RearRight,
         FrontRight,
-        AngledRight
+        AngledRight,
+        TCS3472,
+        MPU9250,
+        DS18B20Conv,
+        DS18B20MOSFET
     };
 
     // description of detected objects
@@ -110,10 +114,18 @@ namespace CAR {
     void modifyRotationOffset(float change);
 
     /// @brief runs interactive rotation and distance sensor calibration flow
-    /// @param samples number of distance measurements read for each tested viewport center
-    /// @param rotationTime time used to analyze noise in rotation measurements in ms
-    /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration
-    void runCalibration(const uint32_t samples = 50, uint32_t rotationTime = 10000, uint32_t rotationRounds = 8);
+    /// @param samples number of distance measurements read for each test block (or 0 to skip)
+    /// @param rotationTime time used to analyze noise in rotation measurements in ms (or 0 to skip)
+    /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration (or 0 to skip)
+    void runCalibration(const uint32_t samples = 50, uint32_t rotationTime = 20000, uint32_t rotationRounds = 16);
+
+    /// @brief runs complete VL53L1X sensor test and records data as .obj files (import in Blender)
+    void runTest();
+
+    /// @brief changes VL53L1X settings and restarts continous measurements
+    /// @param sensor sensor which should be read
+    /// @param longRange whether large values are expected (> 1.5 m)
+    void setDistanceMode(SENSORS sensor, bool longRange = true);
 
     /// @brief sets camera LED ring colors (min 300us delay between writes required)
     /// @param color color to be displayed on all LEDs
@@ -154,7 +166,8 @@ namespace CAR {
     void update();
 
     /// @brief waits until the start button is pressed (blocking) - activates button LED while waiting
-    void waitButtonPress();
+    /// @returns duration of the button press in ms
+    uint32_t waitButtonPress();
 }
 
 #endif

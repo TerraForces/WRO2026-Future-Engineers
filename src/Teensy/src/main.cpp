@@ -7,8 +7,8 @@
 #pragma GCC optimize("-Ofast")
 
 // select program
-//#define TEST
-#define OBJECTS
+#define TEST
+//#define OBJECTS
 
 #include "car.hpp"
 
@@ -18,7 +18,7 @@
 void setup() {
     CAR::init();
     CAR::waitButtonPress();
-    CAR::runCalibration(50, 30000, 16);
+    CAR::runCalibration();
     CAR::start();
     CAR::showSensorData(true);
     /*CAR::setServo(0.0f);

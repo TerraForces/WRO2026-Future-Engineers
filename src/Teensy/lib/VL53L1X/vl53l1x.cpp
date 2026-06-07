@@ -183,7 +183,7 @@ bool VL53L1X::begin(bool longMode, uint8_t viewportCenter) {
     vl53l1xWriteWord(_i2c, _address, 0x0078, longMode ? 0x0F0D : 0x0705);
     vl53l1xWriteWord(_i2c, _address, 0x007A, longMode ? 0x0E0E : 0x0606);
     setTimingBudget(longMode ? 50 : 33);
-    setIntermeasurement(longMode ? 51 : 33);
+    setIntermeasurement(longMode ? 50 : 33);
     vl53l1xWriteByte(_i2c, _address, 0x007F, viewportCenter);
     vl53l1xWriteByte(_i2c, _address, 0x0080, 0x55);
     delay(15);
@@ -262,6 +262,8 @@ bool VL53L1X::setIntermeasurement(uint32_t ms) {
 bool VL53L1X::setROI(uint8_t w, uint8_t h, uint8_t c) {
     if(w < 4) return false;
     if(h < 4) return false;
+    if(w > 16) return false;
+    if(h > 16) return false;
     vl53l1xWriteByte(_i2c, _address, 0x007F, c);
     vl53l1xWriteByte(_i2c, _address, 0x0080, ((w - 1) << 4) | (h - 1));
     return true;
