@@ -46,8 +46,8 @@ constexpr uint8_t Pin_LCD_LED		    = 12; //    out - LCD Backlight Control PWM
 constexpr uint8_t Pin_LCD_MISO		    = 1;  // in     - LCD SPI Master In Slave Out (unused)
 constexpr uint8_t Pin_LCD_MOSI		    = 26; //    out - LCD SPI Master Out Slave In
 constexpr uint8_t Pin_LCD_SCK		    = 27; //    out - LCD SPI Clock
-constexpr uint8_t Pin_LCD_RST		    = 32; //    out - 
-constexpr uint8_t Pin_LCD_DC		    = 31; //    out - 
+constexpr uint8_t Pin_LCD_RST		    = 32; //    out - LCD reset
+constexpr uint8_t Pin_LCD_DC		    = 31; //    out - LCD data/command selection
 constexpr uint8_t Pin_NeoPixel          = 15; //    out - NeoPixel data signal
 constexpr uint8_t Pin_RPI5_PWR          = 7;  //    out - enables RPi5 voltage converter
 constexpr uint8_t Pin_RPI5_RX           = 28; // in     - RPi5 UART receive
@@ -59,7 +59,7 @@ constexpr uint8_t Pin_VL53L1X_SHT_AL_RL = 5;  //    out - angled left and rear l
 constexpr uint8_t Pin_VL53L1X_SHT_AR_FR = 38; //    out - angled right and front right VL53L1X combined shutdown pin
 constexpr uint8_t Pin_VL53L1X_SHT_FC_RR = 36; //    out - front center and rear right VL53L1X combined shutdown pin
 constexpr uint8_t Pin_VL53L1X_SHT_FL_RC = 2;  //    out - front left and rear center VL53L1X combined shutdown pin
-constexpr uint8_t Pins_VL53L1X_INT[8]   = { 35, 4, 3, 6, 9, 34, 33, 39 }; // in     - VL53L1X data ready interrupt pins
+constexpr uint8_t Pins_VL53L1X_INT[8]   = { 35, 4, 3, 6, 9, 34, 33, 39 }; // in - VL53L1X data ready interrupt pins
 
 // lcd color configuration
 #define RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3))
@@ -82,9 +82,13 @@ constexpr float    Config_Drive_PWM_Freq         = 2959.955f;
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000; // us
 constexpr uint32_t Config_RPI5_Startup_Millis    = 40000;
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;
-constexpr uint16_t Config_Servo_Center_Duty      = 33033;
 constexpr float    Config_Servo_Max_Angle        = 50.0f;
 constexpr bool     Config_VL53L1X_LongMode[8]    = { 1, 1, 1, 1, 1, 1, 1, 1 };
+
+// configuration on sd card
+uint8_t vl53l1xViewportCenters[8] = { 199, 199, 199, 199, 199, 199, 199, 199 };
+float rotationTimeOffset = 0.0f, rotationFactor = 0.5f;
+uint16_t servoCenterDuty = 33033;
 
 // bus, display and sensor objects
 OneWire oneWire(Pin_DS18B20_OneWire);
@@ -107,8 +111,7 @@ uint16_t lastDistance[8] = {};
 std::vector<CAR::OBJECT> lastObjects, currentObjects;
 float lastRotation = 0.0f;
 float lastVoltage = 0.0f;
-float rotationOffset = 0.0f, rotationTimeOffset = 0.0f, rotationFactor = 0.0f;
-uint8_t vl53l1xViewportCenters[8] = { 199, 199, 199, 199, 199, 199, 199, 199 };
+float rotationOffset = 0.0f;
 bool sensorActive[12] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 bool sensorWarning[12] = {};
 bool sensorError[12] = {};
@@ -245,6 +248,7 @@ void CAR::init(bool rpi5) {
         for(uint8_t i = 0; i < 8; i++) vl53l1xViewportCenters[i] = configFile.readStringUntil('\n').toInt();
         rotationTimeOffset = configFile.readStringUntil('\n').toFloat();
         rotationFactor = configFile.readStringUntil('\n').toFloat();
+        servoCenterDuty = configFile.readStringUntil('\n').toInt();
         configFile.close();
     }
 
@@ -254,7 +258,7 @@ void CAR::init(bool rpi5) {
     i2c2.begin(400000);
 
     // start IMU
-    sensorError[MPU9250] = imu.begin();
+    sensorError[MPU9250] = !imu.begin();
 
     // start DS18B20 temperature sensors
     ds18b20.begin();
@@ -264,18 +268,18 @@ void CAR::init(bool rpi5) {
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_FL_RC, HIGH);
     delay(15);
-    sensorError[FrontLeft] = vl53l1x[FrontLeft].setAddress(0x2C);
-    sensorError[RearCenter] = vl53l1x[RearCenter].setAddress(0x2C);
+    sensorError[FrontLeft] = !vl53l1x[FrontLeft].setAddress(0x2C);
+    sensorError[RearCenter] = !vl53l1x[RearCenter].setAddress(0x2C);
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_FC_RR, HIGH);
     delay(15);
-    sensorError[FrontCenter] = vl53l1x[FrontCenter].setAddress(0x2B);
-    sensorError[RearRight] = vl53l1x[RearRight].setAddress(0x2B);
+    sensorError[FrontCenter] = !vl53l1x[FrontCenter].setAddress(0x2B);
+    sensorError[RearRight] = !vl53l1x[RearRight].setAddress(0x2B);
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_AR_FR, HIGH);
     delay(15);
-    sensorError[AngledRight] = vl53l1x[AngledRight].setAddress(0x2A);
-    sensorError[FrontRight] = vl53l1x[FrontRight].setAddress(0x2A);
+    sensorError[AngledRight] = !vl53l1x[AngledRight].setAddress(0x2A);
+    sensorError[FrontRight] = !vl53l1x[FrontRight].setAddress(0x2A);
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_AL_RL, HIGH);
     delay(15);
@@ -283,7 +287,7 @@ void CAR::init(bool rpi5) {
     delay(15);
 
     // start TCS3472 color sensor
-    sensorError[TCS3472] = tcs3472.begin();
+    sensorError[TCS3472] = !tcs3472.begin();
 
     if(rpi5) {
         // start UART
@@ -323,7 +327,7 @@ void CAR::modifyRotationOffset(float change) {
 constexpr uint8_t testViewports[] = { 59, 60, 61, 62, 63, 199, 198, 197, 196, 195, 194 };
 constexpr char directions[8][3] = { "FC", "AL", "FL", "RL", "RC", "RR", "FR", "AR" };
 
-void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t rotationRounds) {
+void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t rotationRounds, bool servoCalibration) {
 
     if(rotationTime) {
 
@@ -331,6 +335,7 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation time offset", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
+        delay(500);
         if(waitButtonPress() <= 1000) {
 
             // tell user to not touch during first part of calibration
@@ -357,6 +362,7 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation factor", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
+        delay(500);
         if(waitButtonPress() <= 1000) {
         
             // calculate initial rotation
@@ -368,6 +374,7 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
             // tell user to turn the vehicle for rotation factor calibration
             lcd.fillScreen(Color_Background);
             lcd.drawText(4, 4, font5x7, ("please turn " + String(rotationRounds) + " rounds\nand then press button").c_str(), Color_Text, Color_Background);
+            delay(500);
             while(digitalReadFast(Pin_Button_INT)) {
                 if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(&lastRotation);
             }
@@ -483,12 +490,41 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
         }
     }
 
+    if(servoCalibration) {
+
+        // ask user whether to skip
+        lcd.fillScreen(Color_Background);
+        lcd.drawText(4, 4, font5x7, "calibration:\nservo center", Color_Text, Color_Background);
+        lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
+        delay(500);
+        if(waitButtonPress() <= 1000) {
+            delay(500);
+
+            while(false) {
+                setServo(0.0f);
+                float startRotation = getRotation();
+                setVelocity(0.5f);
+                while(getDistance(FrontCenter) > 1000) update();
+                setVelocity(0.0f, false);
+                delay(500);
+                float rotationDifference = getRotation() - startRotation;
+            }
+
+            lcd.fillScreen(Color_Background);
+            lcd.drawText(4, 4, font5x7, "there's nothing\nhere yet, sorry", Color_Text, Color_Background);
+
+            // wait for user input to continue
+            waitButtonPress();
+        }
+    }
+
     // write results to sd card
     SD.remove("/config.txt");
     File file = SD.open("/config.txt", FILE_WRITE_BEGIN);
     for(uint8_t i = 0; i < 8; i++) file.println(vl53l1xViewportCenters[i]);
-    file.println(rotationTimeOffset, 7);
-    file.println(rotationFactor, 7);
+    file.println(rotationTimeOffset, 8);
+    file.println(rotationFactor, 8);
+    file.println(servoCenterDuty);
     file.close();
 }
 
@@ -569,10 +605,16 @@ void CAR::runTest() {
     }
 }
 
-void CAR::setDistanceMode(SENSORS sensor, bool longRange = true) {
+void CAR::setDistanceROI(SENSORS sensor, uint8_t w, uint8_t h) {
     if(sensor >= 8) return;
     vl53l1x[sensor].stop();
-    vl53l1x[sensor].setROI(longRange ? 6 : 10, longRange ? 4 : 8, longRange ? vl53l1xViewportCenters[sensor] : 199);
+    uint8_t idx = 0;
+    for(uint8_t i = 0; i < sizeof(testViewports); i++) if(testViewports[i] == vl53l1xViewportCenters[sensor]) {
+        idx = i;
+        break;
+    }
+    h = constrain(h, 4, 12);
+    vl53l1x[sensor].setROI(constrain(w, 4, 12), h, (8 - ((h + 1) / 2)) < abs((int)(sizeof(testViewports) / 2) - idx) ? testViewports[(idx < (sizeof(testViewports) / 2)) ? ((sizeof(testViewports) / 2) - (8 - ((h + 1) / 2))) : ((sizeof(testViewports) / 2) + (8 - ((h + 1) / 2)))] : vl53l1xViewportCenters[sensor]);
     vl53l1x[sensor].start();
 }
 
@@ -607,7 +649,7 @@ void CAR::setVelocity(float _velocity, bool _brakes, float _acceleration, float 
 }
 
 void CAR::setServo(float angle) {
-    analogWrite(Pin_Servo_PWM, Config_Servo_Center_Duty + (int)(((angle < -Config_Servo_Max_Angle) ? -Config_Servo_Max_Angle : ((angle > Config_Servo_Max_Angle) ? Config_Servo_Max_Angle : angle)) * Config_Servo_Angle_To_Duty));
+    analogWrite(Pin_Servo_PWM, servoCenterDuty + (int)(((angle < -Config_Servo_Max_Angle) ? -Config_Servo_Max_Angle : ((angle > Config_Servo_Max_Angle) ? Config_Servo_Max_Angle : angle)) * Config_Servo_Angle_To_Duty));
 }
 
 void CAR::showFinish(const char* userData) {
@@ -692,7 +734,7 @@ void CAR::start() {
 
     // configure servo pin and PWM
     analogWriteFrequency(Pin_Servo_PWM, 333.0f);
-    analogWrite(Pin_Servo_PWM, Config_Servo_Center_Duty);
+    analogWrite(Pin_Servo_PWM, servoCenterDuty);
 
     // update sensors multiple times
     uint32_t endMillis = millis() + 200;
@@ -782,8 +824,11 @@ uint32_t CAR::waitButtonPress() {
     digitalWriteFast(Pin_Button_LED, HIGH);
 
     // wait until button is pressed down
-    uint32_t start = millis();
     while(digitalReadFast(Pin_Button_INT)) yield();
+
+    // wait until button is released
+    uint32_t start = millis();
+    while(!digitalReadFast(Pin_Button_INT)) yield();
     uint32_t end = millis();
 
     // deactivate button LED

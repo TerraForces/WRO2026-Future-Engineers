@@ -7,8 +7,8 @@
 #pragma GCC optimize("-Ofast")
 
 // select program
-#define TEST
-//#define OBJECTS
+//#define TEST
+#define OBJECTS
 
 #include "car.hpp"
 
@@ -21,9 +21,6 @@ void setup() {
     CAR::runCalibration();
     CAR::start();
     CAR::showSensorData(true);
-    /*CAR::setServo(0.0f);
-    delay(500);
-    CAR::setVelocity(0.3f);*/
 }
 
 void loop() {
@@ -54,10 +51,10 @@ using namespace CAR;
 #ifndef OBJECTS
 
 // angle configuration
-constexpr float curveEnd          = 52.5f;
-constexpr float curveServoAngle   = 35.0f;
+constexpr float curveEnd          =  52.5f;
+constexpr float curveServoAngle   =  35.0f;
 constexpr float reactionFactor    = -0.25f;
-constexpr float wallReactionAngle = 10.0f;
+constexpr float wallReactionAngle =  10.0f;
 
 // speed configuration
 constexpr float boostSpeed  = 1.0f;
@@ -108,13 +105,13 @@ void setup() {
         if((abs(getRotation()) < 5.0f) || (getDistance(FrontCenter) < 400)) {
 
             // detect open space on the left
-            if(getDistance(FrontLeft) > 1000) {
+            if(getDistance(FrontLeft) > 800) {
                 direction = 0;
                 break;
             }
 
             // detect open space on the right
-            else if(getDistance(FrontRight) > 1000) {
+            else if(getDistance(FrontRight) > 800) {
                 direction = 1;
                 break;
             }
@@ -199,11 +196,11 @@ void loop() {
 // functions to detect whether a line of this color is visible below the color sensor
 bool onOrangeLine() {
     CAR::COLOR16 color = CAR::getColor();
-    return color.r > (color.b * 2.5f);
+    return color.r > (color.b * 2.625f);
 }
 bool onBlueLine() {
     CAR::COLOR16 color = CAR::getColor();
-    return color.b > color.r;
+    return color.b > (color.r * 1.1f);
 }
 
 // angle configuration
@@ -213,20 +210,19 @@ constexpr float wallReactionAngle       = 10.0f;
 constexpr float wallReactionTargetAngle = 6.0f;
 
 // distance configuration
-constexpr uint16_t parkingSpaceDetectionThreshold = 65;
+constexpr uint16_t parkingSpaceDetectionThreshold = 60;
 constexpr uint16_t wallReactionDistance           = 100;
 
 // speed configuration
-constexpr float normalSpeed = 0.4f;
-constexpr float fastSpeed   = 0.6f;
-constexpr float slowSpeed   = 0.25f;
+constexpr float normalSpeed = 0.45f;
+constexpr float fastSpeed   = 0.75f;
+constexpr float slowSpeed   = 0.3f;
 
-bool direction = 0; // 0 = counterclockwise, 1 = clockwise
-bool parkingSpace = 0; // 0 = parking space at the end of the section, 1 = parking space at the beginning of the section (in driving direction)
+bool direction = 0;             // 0 = counterclockwise, 1 = clockwise
+bool parkingSpace = 0;          // 0 = parking space at the end of the section, 1 = parking space at the beginning of the section (in driving direction)
 uint8_t knownObstacles[4] = {}; // 0 = unknown, 1 = drive next to the inner border, 2 = drive next to the outer border
-bool nearInnerBorder = false; // indicates where the vehicle is currently driving
+bool nearInnerBorder = false;   // indicates where the vehicle is currently driving
 uint8_t curveCount = 0;
-float parkSpeed = 0;
 uint32_t timestamp = 0;
 
 inline void wallCorrection() {
@@ -276,8 +272,12 @@ void setup() {
     CAR::waitButtonPress();
     CAR::start();
 
+    // increase range of interest width of angled sensors
+    CAR::setDistanceROI(AngledLeft, 12, 4);
+    CAR::setDistanceROI(AngledRight, 12, 4);
+
     // adjust park speed accoding to battery voltage
-    parkSpeed = 0.17f + ((8.4f - getBatteryVoltage()) * 0.06f);
+    float parkSpeed = 0.16f + ((8.4f - getBatteryVoltage()) * 0.067f);
 
     // detect driving direction
     direction = getDistance(FrontRight) > 200;
@@ -285,14 +285,14 @@ void setup() {
     // leave parking space - first move
     setServo(direction ? -50.0f : 50.0f);
     setVelocity(parkSpeed);
-    while(direction ? (getRotation() > -24.0f) : (getRotation() < 24.0f)) update();
+    while(direction ? (getRotation() > -20.0f) : (getRotation() < 20.0f)) update();
     setVelocity(0.0f, true);
     wait(250);
 
     // leave parking space - second move
     setServo(direction ? 50.0f : -50.0f);
     setVelocity(-parkSpeed);
-    while((direction ? (getRotation() > -55.0f) : (getRotation() < 55.0f))) update();
+    while((direction ? (getRotation() > -40.0f) : (getRotation() < 40.0f))) update();
     setVelocity(0.0f, true);
     setServo(0.0f);
     wait(250);
@@ -300,7 +300,17 @@ void setup() {
     // leave parking space - third move
     setServo(direction ? -50.0f : 50.0f);
     setVelocity(parkSpeed);
-    while(direction ? (getRotation() > -85.0f) : (getRotation() < 85.0f)) update();
+    while(direction ? (getRotation() > -65.0f) : (getRotation() < 65.0f)) update();
+    setVelocity(0.0f, true);
+    wait(250);
+
+    // leave parking space - fourth move
+    setServo(direction ? 50.0f : -50.0f);
+    setVelocity(-parkSpeed);
+    while((direction ? (getRotation() > -85.0f) : (getRotation() < 85.0f))) update();
+    setVelocity(0.0f, true);
+    wait(250);
+    setVelocity(parkSpeed);
 
     // drive until the sensors on the front side have full left the parking space
     while((getDistance(FrontLeft) < 200) || (getDistance(FrontRight) < 200) || (getDistance(RearCenter) < 115)) {
@@ -309,10 +319,7 @@ void setup() {
     }
 
     // detect parking space position
-    uint16_t d0 = getDistance(direction ? FrontLeft : FrontRight);
-    uint16_t d1 = getDistance(direction ? FrontRight : FrontLeft);
-    wait(100);
-    parkingSpace = (getDistance(direction ? FrontLeft : FrontRight) + d0) > (getDistance(direction ? FrontRight : FrontLeft) + d1);
+    parkingSpace = getDistance(direction ? FrontLeft : FrontRight) > getDistance(direction ? FrontRight : FrontLeft);
 
     if(parkingSpace) {
         setServo(direction ? 45.0f : -45.0f);
@@ -365,7 +372,6 @@ void setup() {
                 update();
             }
             setServo(direction ? -40.0f : 40.0f);
-            setVelocity(slowSpeed);
             while(direction ? (getRotation() > -135.0f) : (getRotation() < 135.0f)) update();
             setServo(direction ? 40.0f : -40.0f);
             while(direction ? (getRotation() < -90.0f) : (getRotation() > 90.0f)) update();
@@ -387,7 +393,6 @@ void setup() {
         else {
             setVelocity(parkSpeed);
             setServo(direction ? 45.0f : -45.0f);
-            setVelocity(parkSpeed);
             while(direction ? (getRotation() < -2.0f) : (getRotation() > 2.0f)) update();
             setServo(0.0f);
             nearInnerBorder = false;
@@ -400,118 +405,117 @@ void setup() {
         // first round
         if(knownObstacles[(curveCount + 1) & 3] == 0) {
             if(nearInnerBorder) {
-                while((getDistance(FrontCenter) > 925) && (getDistance(direction ? RearRight : RearLeft) < 1000)) {
-                    setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * (-reactionFactor));
-                    update();
-                }
-                if(getDistance(direction ? RearRight : RearLeft) < 1000) {
-                    setVelocity(0.0f, true);
-                    wait(100);
-                    setVelocity(-slowSpeed);
-                    timestamp = millis();
-                    waitReaction(600);
-                }
-                setVelocity(parkSpeed);
-                setServo(direction ? -45.0f : 45.0f);
-                while(direction ? (getRotation() > ((curveCount * -90.0f) - 60.0f)) : (getRotation() < ((curveCount * 90.0f) + 60.0f))) update();
-                setVelocity(0.0f, true);
-                wait(150);
-                setVelocity(-parkSpeed);
-                while(direction ? (!onOrangeLine()) : (!onBlueLine())) {
-                    setServo((getRotation() - ((curveCount * (direction ? -90.0f : 90.0f)) - (direction ? 60.0f : -60.0f))) * reactionFactor * 2.0f);
-                    update();
-                }
-                setVelocity(0.0f, true);
                 curveCount++;
-            }
-            else {
-                setVelocity(slowSpeed);
-                while((getDistance(FrontCenter) > 940) && (getDistance(direction ? RearRight : RearLeft) < 1100)) {
-                    setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * (-reactionFactor));
-                    update();
-                }
-                if(getDistance(direction ? RearRight : RearLeft) < 1000) {
-                    setVelocity(0.0f, true);
-                    wait(100);
-                    setVelocity(-slowSpeed);
-                    timestamp = millis();
-                    waitReaction(600);
-                }
-                curveCount++;
-                setVelocity(normalSpeed);
-                setServo(direction ? -45.0f : 45.0f);
-                while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
-                timestamp = millis();
-                while((getDistance(RearCenter) < 600) || (millis() < (timestamp + 200))) {
-                    setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
-                    update();
-                }
-                timestamp = millis();
-                setVelocity(0.0f, true);
-                while((timestamp + 250) > millis()) update();
-                setVelocity(-slowSpeed);
-                setServo(direction ? -45.0f : 45.0f);
-                while(direction ? (getRotation() < ((curveCount * -90.0f) + 25.0f)) : (getRotation() > ((curveCount * 90.0f) - 25.0f))) update();
-                timestamp = millis();
-                setVelocity(0.0f, true);
-                while((timestamp + 250) > millis()) update();
-            }
-
-            // detect object
-            readObject();
-
-            // wait to compensate for latency and try again if no object was detected
-            if(knownObstacles[curveCount & 3] == 0) {
-                wait(200);
                 readObject();
-            }
+                if(knownObstacles[curveCount & 3] == 0) {
+                    wait(50);
+                    readObject();
+                }
+                curveCount--;
+                if(knownObstacles[(curveCount + 1) & 3] == 1) {
+                    nearInnerBorder = true;
+                    curveCount++;
+                    setVelocity(normalSpeed);
+                    setServo(direction ? -45.0f : 45.0f);
+                    while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
+                    timestamp = millis();
+                    setVelocity(fastSpeed);
+                    while((getDistance(FrontCenter) > 1200) || (millis() < (timestamp + 500))) {
+                        setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                        wallCorrection();
+                    }
+                }
+                else if(knownObstacles[(curveCount + 1) & 3] == 2) {
+                    nearInnerBorder = false;
+                    setVelocity(normalSpeed);
+                    timestamp = millis();
+                    while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 550 : 200)) || (millis() < (timestamp + 200))) {
+                        setServo((getRotation() - ((curveCount) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                        update();
+                    }
 
-            if(knownObstacles[curveCount & 3] == 1) {
-                nearInnerBorder = true;
-                setVelocity(normalSpeed);
-                setServo(direction ? -45.0f : 45.0f);
-                while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
-                setVelocity(fastSpeed);
+                    curveCount++;
+                    setServo(direction ? -45.0f : 45.0f);
+                    while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
+                    timestamp = millis();
+                    setVelocity(fastSpeed);
+                    while((getDistance(FrontCenter) > 1200) || (millis() < (timestamp + 300))) {
+                        setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                        wallCorrection();
+                    }
+                }
+                else if(knownObstacles[(curveCount + 1) & 3] == 0) goto middle;
+
                 timestamp = millis();
-                while((getDistance(FrontCenter) > 1500) || (millis() < (timestamp + 200))) {
+                setVelocity(fastSpeed);
+                while((getDistance(FrontCenter) > 1200) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     wallCorrection();
                 }
                 setVelocity(0.0f, true);
-                timestamp = millis();
-                while((timestamp + 15) > millis()) update();
+                wait(15);
                 setVelocity(slowSpeed);
                 timestamp = millis();
-                while((getDistance(direction ? FrontRight : FrontLeft) < 1000) || (getDistance(FrontCenter) > 1400) || (millis() < (timestamp + 100))) {
+                while((getDistance(direction ? FrontRight : FrontLeft) < 1100) || (getDistance(FrontCenter) > 1100) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
             }
             else {
-                nearInnerBorder = false;
+            middle:
                 setVelocity(slowSpeed);
-                setServo(direction ? 45.0f : -45.0f);
-                while(direction ? (getRotation() < ((curveCount * -90.0f) + 85.0f)) : (getRotation() > ((curveCount * 90.0f) - 85.0f))) update();
-                timestamp = millis();
-                while((getDistance(FrontCenter) > (((curveCount & 3) == 0) ? 550 : 260)) || (millis() < (timestamp + 200))) {
-                    setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                while(getDistance(FrontCenter) > 600) {
+                    setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
+                curveCount++;
                 setVelocity(normalSpeed);
-                setServo(direction ? -45.0f : 45.0f);
+                setServo(direction ? -40.0f : 40.0f);
                 while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
-                setVelocity(fastSpeed);
                 timestamp = millis();
-                while((getDistance(FrontCenter) > 1500) || (millis() < (timestamp + 800))) {
+                while((getDistance(RearCenter) < 500) || (millis() < (timestamp + 200))) {
+                    setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                    update();
+                }
+                readObject(nearInnerBorder ? 95 : 73);
+
+                if(knownObstacles[curveCount & 3] == 1) {
+                    setVelocity(slowSpeed);
+                    nearInnerBorder = true;
+                    setServo(direction ? -40.0f : 40.0f);
+                    while(direction ? (getRotation() > ((curveCount * -90.0f) - 37.0f)) : (getRotation() < ((curveCount * 90.0f) + 37.0f))) update();
+                    timestamp = millis();
+                    while((getDistance(direction ? AngledRight : AngledLeft) > 250) || (millis() < (timestamp + 200))) {
+                        setServo((getRotation() - ((curveCount * (direction ? -90.0f : 90.0f)) + (direction ? -40.0f : 40.0f))) * reactionFactor * -2.0f);
+                        update();
+                    }
+                    setServo(direction ? 40.0f : -40.0f);
+                    while(direction ? (getRotation() < ((curveCount * -90.0f) - 10.0f)) : (getRotation() > ((curveCount * 90.0f) + 10.0f))) update();
+                }
+                else {
+                    nearInnerBorder = false;
+                    setServo(direction ? 40.0f : -40.0f);
+                    while(direction ? (getRotation() < ((curveCount * -90.0f) + 37.0f)) : (getRotation() > ((curveCount * 90.0f) - 37.0f))) update();
+                    timestamp = millis();
+                    while((getDistance(direction ? AngledLeft : AngledRight) > (((curveCount & 3) == 0) ? 425 : 200)) || (millis() < (timestamp + 200))) {
+                        setServo((getRotation() - ((curveCount * (direction ? -90.0f : 90.0f)) + (direction ? 40.0f : -40.0f))) * reactionFactor * -2.0f);
+                        update();
+                    }
+                    setServo(direction ? -40.0f : 40.0f);
+                    while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
+                }
+
+                timestamp = millis();
+                setVelocity(fastSpeed);
+                while((getDistance(FrontCenter) > 1200) || (millis() < (timestamp + 200))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     wallCorrection();
                 }
                 setVelocity(0.0f, true);
-                timestamp = millis();
-                while((timestamp + 15) > millis()) update();
+                wait(15);
                 setVelocity(slowSpeed);
                 timestamp = millis();
-                while((getDistance(direction ? FrontRight : FrontLeft) < 1200) || (getDistance(FrontCenter) > 1400) || (millis() < (timestamp + 100))) {
+                while((getDistance(direction ? FrontRight : FrontLeft) < 1100) || (getDistance(FrontCenter) > 1100) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -522,7 +526,7 @@ void setup() {
         else {
             if(knownObstacles[(curveCount + 1) & 3] == 2) {
                 timestamp = millis();
-                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 500 : 280)) || (millis() < (timestamp + 100))) {
+                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 500 : 320)) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -540,13 +544,13 @@ void setup() {
             while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
             setVelocity(fastSpeed);
             timestamp = millis();
-            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1500 : 1000)) || (millis() < (timestamp + 800))) {
+            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1400 : ((((curveCount + 1) & 3) == 0) ? 800 : 600))) || (millis() < (timestamp + 1400))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 wallCorrection();
             }
             setVelocity(slowSpeed, false, 0.25f, -4.0f);
             timestamp = millis();
-            while(((getDistance(direction ? FrontRight : FrontLeft) < 1300) || (getDistance(FrontCenter) > 1400)) || (millis() < (timestamp + 100))) {
+            while(((getDistance(direction ? FrontRight : FrontLeft) < 1300) || (getDistance(FrontCenter) > 1300)) || (millis() < (timestamp + 100))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 update();
             }
@@ -600,140 +604,118 @@ void setup() {
             setVelocity(-parkSpeed);
             lastDistance = getDistance(direction ? FrontLeft : FrontRight);
             secondLastDistance = getDistance(direction ? FrontLeft : FrontRight);
-
-            ///////////////////// unformatted!!! /////////////////////////////////////////
-            while((getDistance(direction?(FrontLeft):(FrontRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(FrontLeft):(FrontRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
+            while((getDistance(direction ? FrontLeft : FrontRight) < (lastDistance + parkingSpaceDetectionThreshold)) && (getDistance(direction ? FrontLeft : FrontRight) < (secondLastDistance + parkingSpaceDetectionThreshold))) {
                 update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
-                if(getDistance(direction?(FrontLeft):(FrontRight)) != lastDistance){
+                setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
+                if(getDistance(direction ? FrontLeft : FrontRight) != lastDistance) {
                     secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
+                    lastDistance = getDistance(direction ? FrontLeft : FrontRight);
                 }
             }
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed);
-            while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -85.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 85.0f)) update();
             setServo(0.0f);
-            while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
+            while((getDistance(RearCenter) > 15) || (getDistance(FrontRight) > 200) || (getDistance(FrontLeft) > 200)) {
                 update();
-                setServo(((getRotation() - ((curveCount + 1)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
+                setServo((getRotation() - ((curveCount + 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
             }
         }
         else {
             setVelocity(parkSpeed);
-            lastDistance = getDistance(direction?(RearLeft):(RearRight));
-            secondLastDistance = getDistance(direction?(RearLeft):(RearRight));
-            while((getDistance(direction?(RearLeft):(RearRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(RearLeft):(RearRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
+            lastDistance = getDistance(direction ? RearLeft : RearRight);
+            secondLastDistance = lastDistance;
+            while((getDistance(direction ? RearLeft : RearRight) < (lastDistance + parkingSpaceDetectionThreshold)) && (getDistance(direction ? RearLeft : RearRight) < (secondLastDistance + parkingSpaceDetectionThreshold))) {
                 update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((-reactionFactor*2)));
-                if(getDistance(direction?(RearLeft):(RearRight)) != lastDistance){
+                setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                if(getDistance(direction ? RearLeft : RearRight) != lastDistance) {
                     secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(RearLeft):(RearRight));
+                    lastDistance = getDistance(direction ? RearLeft : RearRight);
                 }
             }
-            lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            secondLastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            while((getDistance(direction?(FrontLeft):(FrontRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(FrontLeft):(FrontRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
-                update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((-reactionFactor*2)));
-                if(getDistance(direction?(FrontLeft):(FrontRight)) != lastDistance){
-                    secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-                }
-            }
-            setVelocity(0.0f,true);
-            setServo(0);
-            wait(250);
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed,0,1,5);
-            wait(450);
-            while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
-            setServo(0.0f);
-            while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 30.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -30.0f)) update();
+            setVelocity(0.0f, true);
+            wait(250);
+            setServo(direction ? -50.0f : 50.0f);
+            setVelocity(-parkSpeed);
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 85.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -85.0f)) update();
+            setVelocity(0.0f, true);
+            wait(250);
+            setVelocity(parkSpeed);
+            setDistanceROI(FrontCenter, 12, 8);
+            while((getDistance(FrontCenter) > 10) || (getDistance(FrontRight) > 200) || (getDistance(FrontLeft) > 200)) {
                 update();
-                setServo(((getRotation() - ((curveCount + 1)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
+                setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
         }
     }
-    if(knownObstacles[0] == 1){
+    if(knownObstacles[0] == 1) {
         setServo(direction ? 50.0f : -50.0f);
         setVelocity(parkSpeed);
-        while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) < 85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) > -85.0f))) update();
-        timestamp=millis();
-        setServo(0);
-        while((timestamp + 250 > millis())||(getDistance(RearCenter) < 400)){
+        while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 85.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -85.0f)) update();
+        timestamp = millis();
+        setServo(0.0f);
+        while(((timestamp + 250) > millis()) || (getDistance(RearCenter) < 400)) {
             update();
-            setServo(((getRotation() - ((curveCount-1)*(direction?-90.0f:90.0f))))*((-reactionFactor*2)));
+            setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
         }
         setServo(direction ? -50.0f : 50.0f);
-        setVelocity(parkSpeed);
-        while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > 5.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 5.0f))) update();
-        setVelocity(0.0f,true);
+        while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > 5.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 5.0f)) update();
+        setVelocity(0.0f, true);
         wait(250);
-        setServo(0);
+        setServo(0.0f);
         setVelocity(-slowSpeed);
-        timestamp=millis();
-        setServo(0);
-        while((timestamp + 700 > millis())||(getDistance(FrontCenter) < ((parkingSpace)?1400:1800))){
+        timestamp = millis();
+        while(((timestamp + 250) > millis()) || (getDistance(FrontCenter) < (parkingSpace ? 1400 : 1700))) {
             update();
-            setServo(((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
+            setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
         }
-
-        if(parkingSpace){
+        if(parkingSpace) {
             setVelocity(-parkSpeed);
-            lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            secondLastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            while((getDistance(direction?(FrontLeft):(FrontRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(FrontLeft):(FrontRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
+            lastDistance = getDistance(direction ? FrontLeft : FrontRight);
+            secondLastDistance = lastDistance;
+            while((getDistance(direction ? FrontLeft : FrontRight) < (lastDistance + parkingSpaceDetectionThreshold)) && (getDistance(direction ? FrontLeft : FrontRight) < (secondLastDistance + parkingSpaceDetectionThreshold))) {
                 update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
-                if(getDistance(direction?(FrontLeft):(FrontRight)) != lastDistance){
+                setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
+                if(getDistance(direction ? FrontLeft : FrontRight) != lastDistance) {
                     secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
+                    lastDistance = getDistance(direction ? FrontLeft : FrontRight);
                 }
             }
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed);
-            while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -85.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 85.0f)) update();
             setServo(0.0f);
-            while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
+            while((getDistance(RearCenter) > 15) || (getDistance(FrontRight) > 200) || (getDistance(FrontLeft) > 200)) {
                 update();
-                setServo(((getRotation() - ((curveCount + 1)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
+                setServo((getRotation() - ((curveCount + 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
             }
         }
-        else{
+        else {
             setVelocity(parkSpeed);
-            lastDistance = getDistance(direction?(RearLeft):(RearRight));
-            secondLastDistance = getDistance(direction?(RearLeft):(RearRight));
-            while((getDistance(direction?(RearLeft):(RearRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(RearLeft):(RearRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
+            lastDistance = getDistance(direction ? RearLeft : RearRight);
+            secondLastDistance = getDistance(direction ? RearLeft : RearRight);
+            while((getDistance(direction ? RearLeft : RearRight) < (lastDistance + parkingSpaceDetectionThreshold)) && (getDistance(direction ? RearLeft : RearRight) < (secondLastDistance + parkingSpaceDetectionThreshold))) {
                 update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((-reactionFactor*2)));
-                if(getDistance(direction?(RearLeft):(RearRight)) != lastDistance){
+                setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                if(getDistance(direction ? RearLeft : RearRight) != lastDistance) {
                     secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(RearLeft):(RearRight));
+                    lastDistance = getDistance(direction ? RearLeft : RearRight);
                 }
             }
-            lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            secondLastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-            while((getDistance(direction?(FrontLeft):(FrontRight)) < lastDistance + parkingSpaceDetectionThreshold)&&(getDistance(direction?(FrontLeft):(FrontRight)) < secondLastDistance + parkingSpaceDetectionThreshold)){
-                update();
-                setServo(((getRotation() - (curveCount*(direction?-90.0f:90.0f))))*((-reactionFactor*2)));
-                if(getDistance(direction?(FrontLeft):(FrontRight)) != lastDistance){
-                    secondLastDistance = lastDistance;
-                    lastDistance = getDistance(direction?(FrontLeft):(FrontRight));
-                }
-            }
-            setVelocity(0.0f,true);
-            setServo(0);
-            wait(250);
-
             setServo(direction ? 50.0f : -50.0f);
-            setVelocity(-parkSpeed,0,1,5);
-            wait(450);
-            while((direction ? ((getRotation() - ((curveCount)*(direction?-90.0f:90.0f))) > -85.0f) : ((getRotation() - (curveCount*(direction?-90.0f:90.0f))) < 85.0f))) update();
-            setServo(0.0f);
-            while((getDistance(RearCenter) > 15)||(getDistance(FrontRight) > 200)||(getDistance(FrontLeft) > 200)){
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 30.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -30.0f)) update();
+            setVelocity(0.0f, true);
+            wait(250);
+            setServo(direction ? -50.0f : 50.0f);
+            setVelocity(-parkSpeed);
+            while(direction ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 85.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -85.0f)) update();
+            setVelocity(0.0f, true);
+            wait(250);
+            setVelocity(parkSpeed);
+            setDistanceROI(FrontCenter, 12, 8);
+            while((getDistance(FrontCenter) > 10) || (getDistance(FrontRight) > 200) || (getDistance(FrontLeft) > 200)) {
                 update();
-                setServo(((getRotation() - ((curveCount + 1)*(direction?-90.0f:90.0f))))*((reactionFactor*2)));
+                setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
         }
     }

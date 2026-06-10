@@ -117,15 +117,16 @@ namespace CAR {
     /// @param samples number of distance measurements read for each test block (or 0 to skip)
     /// @param rotationTime time used to analyze noise in rotation measurements in ms (or 0 to skip)
     /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration (or 0 to skip)
-    void runCalibration(const uint32_t samples = 50, uint32_t rotationTime = 20000, uint32_t rotationRounds = 16);
+    void runCalibration(const uint32_t samples = 40, uint32_t rotationTime = 30000, uint32_t rotationRounds = 16, bool servoCalibration = true);
 
     /// @brief runs complete VL53L1X sensor test and records data as .obj files (import in Blender)
     void runTest();
 
-    /// @brief changes VL53L1X settings and restarts continous measurements
-    /// @param sensor sensor which should be read
-    /// @param longRange whether large values are expected (> 1.5 m)
-    void setDistanceMode(SENSORS sensor, bool longRange = true);
+    /// @brief changes VL53L1X ROI (range of interest) settings and restarts continous measurements
+    /// @param sensor sensor which should be configured
+    /// @param w width of new ROI
+    /// @param h height of new ROI
+    void setDistanceROI(SENSORS sensor, uint8_t w, uint8_t h);
 
     /// @brief sets camera LED ring colors (min 300us delay between writes required)
     /// @param color color to be displayed on all LEDs

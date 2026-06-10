@@ -1,0 +1,5 @@
+- new power diagrams (open + obstacle)
+- new obstacle video
+- calibration changes + images
+- VL53L1X test diagrams
+- code visualisation
