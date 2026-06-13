@@ -9,9 +9,9 @@
 // include header file
 #include "st7735.hpp"
 
+// ST7735 startup/configuration process
 static const uint8_t PROGMEM
-Rcmd1[] = {                 // 7735R init, part 1 (red or green tab)
-    15,                     // 15 commands in list:
+startup[] = {               // 7735R init
     0x01, 0x80,             //  1: Software reset, 0 args, w/delay
     150,                    //     150 ms delay
     0x11, 0x80,             //  2: Out of sleep mode, 0 args, w/delay
@@ -45,32 +45,26 @@ Rcmd1[] = {                 // 7735R init, part 1 (red or green tab)
     0x36, 1,                // 14: Mem access ctl (directions), 1 arg:
     0xC8,                   //     row/col addr, bottom-top refresh
     0x3A, 1,                // 15: set color mode, 1 arg, no delay:
-    0x05                    //     16-bit color
-},                       
-Rcmd2red[] = {              // 7735R init, part 2 (red tab only)
-    2,                      //  2 commands in list:
-    0x2A, 4,                //  1: Column addr set, 4 args, no delay:
+    0x05,                   //     16-bit color
+    0x2A, 4,                // 16: Column addr set, 4 args, no delay:
     0x00, 0x00,             //     XSTART = 0
     0x00, 0x7F,             //     XEND = 127
-    0x2B, 4,                //  2: Row addr set, 4 args, no delay:
+    0x2B, 4,                // 17: Row addr set, 4 args, no delay:
     0x00, 0x00,             //     XSTART = 0
-    0x00, 0x9F              //     XEND = 159s
-},                 
-Rcmd3[] = {                 // 7735R init, part 3 (red or green tab)
-    4,                      //  4 commands in list:
-    0xE0, 16,               //  1: Gamma Adjustments (pos. polarity), 16 args + delay:
+    0x00, 0x9F,             //     XEND = 159s
+    0xE0, 16,               // 18: Gamma Adjustments (pos. polarity), 16 args + delay:
     0x02, 0x1c, 0x07, 0x12, //     (Not entirely necessary, but provides
     0x37, 0x32, 0x29, 0x2d, //      accurate colors)
     0x29, 0x25, 0x2B, 0x39,
     0x00, 0x01, 0x03, 0x10,
-    0xE1, 16,               //  2: Gamma Adjustments (neg. polarity), 16 args + delay:
+    0xE1, 16,               // 19: Gamma Adjustments (neg. polarity), 16 args + delay:
     0x03, 0x1d, 0x07, 0x06, //     (Not entirely necessary, but provides
     0x2E, 0x2C, 0x29, 0x2D, //      accurate colors)
     0x2E, 0x2E, 0x37, 0x3F,
     0x00, 0x00, 0x02, 0x10,
-    0x13, 0x80,             //  3: Normal display on, no args, w/delay
+    0x13, 0x80,             // 20: Normal display on, no args, w/delay
     10,                     //     10 ms delay
-    0x29, 0x80,             //  4: Main screen turn on, no args w/delay
+    0x29, 0x80,             // 21: Main screen turn on, no args w/delay
     100                     //     100 ms delay
 };
 SPISettings settings = SPISettings(32000000, MSBFIRST, SPI_MODE0);
@@ -87,19 +81,28 @@ void ST7735::begin(bool r180) {
     delay(100);
     digitalWriteFast(_rst, HIGH);
     delay(200);
-    displayInit(Rcmd1);
-    displayInit(Rcmd2red);
-    displayInit(Rcmd3);
+    const uint8_t* addr = startup;
+    uint8_t numCommands = 21;
+    while (numCommands--) {
+        uint8_t cmd = *(addr++);
+        uint8_t numArgs = *(addr++);
+        uint16_t ms = numArgs & 0x80;
+        numArgs &= ~0x80;
+        sendCommand(cmd, (void*)addr, numArgs);
+        addr += numArgs;
+        if (ms) {
+            ms = *(addr++);
+            if (ms == 255) ms = 500;
+            delay(ms);
+        }
+    }
+
+    // set display rotation
     uint8_t data = (_w == 160) ? (r180 ? 0xA0 : 0x60) : (r180 ? 0x00 : 0xC0);
     sendCommand(0x36, &data, 1);
 }
 
-#include <limits.h>
-
 void ST7735::drawChar(uint8_t x, uint8_t y, font_t f, char c, uint16_t fg, uint16_t bg, uint8_t s) {
-#ifndef __CHAR_UNSIGNED__
-    c += 128;
-#endif
     if(c < 32) return;
     if(c > 126) return;
     c -= 32;
@@ -254,54 +257,33 @@ void ST7735::fillScreen(uint16_t c) {
     drawRect(0, 0, _w, _h, c);
 }
 
-void ST7735::displayInit(const uint8_t *addr) {
-    uint8_t numCommands, cmd, numArgs;
-    uint16_t ms;
-    numCommands = *(addr++); // Number of commands to follow
-    while (numCommands--) {              // For each command...
-        cmd = *(addr++);       // Read command
-        numArgs = *(addr++);   // Number of args to follow
-        ms = numArgs & 0x80;       // If hibit set, delay follows args
-        numArgs &= ~0x80;          // Mask out delay bit
-        sendCommand(cmd, addr, numArgs);
-        addr += numArgs;
-        if (ms) {
-            ms = *(addr++); // Read post-command delay time (ms)
-            if (ms == 255) ms = 500; // If 255, delay for 500 ms
-            delay(ms);
-        }
+void ST7735::sendCommand(uint8_t command, void *data, uint8_t dataSize, bool completeTransaction) {
+    if(completeTransaction) {
+        _spi->beginTransaction(settings);
+        digitalWriteFast(_cs, LOW);
+    }
+    digitalWriteFast(_dc, LOW);
+    _spi->transfer(command);
+    digitalWriteFast(_dc, HIGH);
+    for(uint8_t i = 0; i < dataSize; i++) _spi->transfer(((uint8_t*)data)[i]);
+    if(completeTransaction) {
+        digitalWriteFast(_cs, HIGH);
+        _spi->endTransaction();
     }
 }
 
-void ST7735::sendCommand(uint8_t commandByte, const uint8_t *dataBytes, uint8_t numDataBytes) {
-    _spi->beginTransaction(settings);
-    digitalWriteFast(_cs, LOW);
-    digitalWriteFast(_dc, LOW);
-    _spi->transfer(commandByte);
-    digitalWriteFast(_dc, HIGH);
-    for (int i = 0; i < numDataBytes; i++) _spi->transfer(*(dataBytes++));
-    digitalWriteFast(_cs, HIGH);
-    _spi->endTransaction();
-}
-
 void ST7735::setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    writeCommand(0x2A);
+    sendCommand(0x2A, 0, 0, false);
     _spi->transfer(x >> 8);
     _spi->transfer(x);
     uint16_t a = x + w - 1;
     _spi->transfer(a >> 8);
     _spi->transfer(a);
-    writeCommand(0x2B);
+    sendCommand(0x2B, 0, 0, false);
     _spi->transfer(y >> 8);
     _spi->transfer(y);
     uint16_t b = y + h - 1;
     _spi->transfer(b >> 8);
     _spi->transfer(b);
-    writeCommand(0x2C);
-}
-
-inline void ST7735::writeCommand(uint8_t command) {
-    digitalWriteFast(_dc, LOW);
-    _spi->transfer(command);
-    digitalWriteFast(_dc, HIGH);
+    sendCommand(0x2C, 0, 0, false);
 }

@@ -62,7 +62,6 @@ constexpr uint8_t Pin_VL53L1X_SHT_FL_RC = 2;  //    out - front left and rear ce
 constexpr uint8_t Pins_VL53L1X_INT[8]   = { 35, 4, 3, 6, 9, 34, 33, 39 }; // in - VL53L1X data ready interrupt pins
 
 // lcd color configuration
-#define RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3))
 constexpr uint16_t Color_Background = RGB565(0x00, 0x00, 0x00);
 constexpr uint16_t Color_Best_Bars  = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_Diff_Neg   = RGB565(0x90, 0x00, 0x00);
@@ -86,7 +85,7 @@ constexpr float    Config_Servo_Max_Angle        = 50.0f;
 constexpr bool     Config_VL53L1X_LongMode[8]    = { 1, 1, 1, 1, 1, 1, 1, 1 };
 
 // configuration on sd card
-uint8_t vl53l1xViewportCenters[8] = { 199, 199, 199, 199, 199, 199, 199, 199 };
+int8_t vl53l1xViewportShift[8] = {};
 float rotationTimeOffset = 0.0f, rotationFactor = 0.5f;
 uint16_t servoCenterDuty = 33033;
 
@@ -245,7 +244,7 @@ void CAR::init(bool rpi5) {
     SD.begin(BUILTIN_SDCARD);
     File configFile = SD.open("/config.txt", FILE_READ);
     if(configFile) {
-        for(uint8_t i = 0; i < 8; i++) vl53l1xViewportCenters[i] = configFile.readStringUntil('\n').toInt();
+        for(uint8_t i = 0; i < 8; i++) vl53l1xViewportShift[i] = configFile.readStringUntil('\n').toInt();
         rotationTimeOffset = configFile.readStringUntil('\n').toFloat();
         rotationFactor = configFile.readStringUntil('\n').toFloat();
         servoCenterDuty = configFile.readStringUntil('\n').toInt();
@@ -283,7 +282,11 @@ void CAR::init(bool rpi5) {
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_AL_RL, HIGH);
     delay(15);
-    for(uint8_t i = 0; i < 8; i++) if(!vl53l1x[i].begin(Config_VL53L1X_LongMode[i], vl53l1xViewportCenters[i])) sensorError[i] = true;
+    for(uint8_t i = 0; i < 8; i++) {
+        if(!vl53l1x[i].begin()) sensorError[i] = true;
+        if(!vl53l1x[i].setROI(0, vl53l1xViewportShift[i], 6, 4)) sensorError[i] = true;
+        if(!vl53l1x[i].start()) sensorError[i] = true;
+    }
     delay(15);
 
     // start TCS3472 color sensor
@@ -324,19 +327,47 @@ void CAR::modifyRotationOffset(float change) {
     rotationOffset -= change;
 }
 
-constexpr uint8_t testViewports[] = { 59, 60, 61, 62, 63, 199, 198, 197, 196, 195, 194 };
 constexpr char directions[8][3] = { "FC", "AL", "FL", "RL", "RC", "RR", "FR", "AR" };
 
-void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t rotationRounds, bool servoCalibration) {
+float testServo(uint32_t duration) {
+    CAR::setServo(0.0f);
+    delay(300);
+    CAR::update();
+    float rotation = CAR::getRotation();
+    CAR::setVelocity(0.5f);
+    delay(duration);
+    CAR::setVelocity(0.0f, true);
+    delay(400);
+    CAR::update();
+    rotation = CAR::getRotation() - rotation;
+    CAR::setVelocity(-0.5f);
+    delay(duration);
+    CAR::setVelocity(0.0f, true);
+    delay(200);
+    return rotation;
+}
 
-    if(rotationTime) {
+constexpr uint8_t shutdownPins[8] = {
+    Pin_VL53L1X_SHT_FC_RR,
+    Pin_VL53L1X_SHT_AL_RL,
+    Pin_VL53L1X_SHT_FL_RC,
+    Pin_VL53L1X_SHT_AL_RL,
+    Pin_VL53L1X_SHT_FL_RC,
+    Pin_VL53L1X_SHT_FC_RR,
+    Pin_VL53L1X_SHT_AR_FR,
+    Pin_VL53L1X_SHT_AR_FR
+};
+
+void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, uint32_t distance, uint32_t rotationDuration, uint32_t rotationRounds, uint32_t servoCalibrationDuration) {
+
+    if(rotationDuration) {
 
         // ask user whether to skip
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation time offset", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
         delay(500);
-        if(waitButtonPress() <= 1000) {
+        if(waitButtonPress(true) <= 1000) {
 
             // tell user to not touch during first part of calibration
             lcd.fillScreen(Color_Background);
@@ -348,11 +379,11 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
             // calculate rotation time offset
             float startRotation = 0.0f;
             imu.getRotation(&startRotation);
-            uint32_t endMillis = millis() + rotationTime;
+            uint32_t endMillis = millis() + rotationDuration;
             while(millis() < endMillis) {
                 if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(&lastRotation);
             }
-            rotationTimeOffset = (startRotation - lastRotation) / rotationTime;
+            rotationTimeOffset = (startRotation - lastRotation) / rotationDuration;
         }
     }
 
@@ -363,7 +394,7 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation factor", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
         delay(500);
-        if(waitButtonPress() <= 1000) {
+        if(waitButtonPress(true) <= 1000) {
         
             // calculate initial rotation
             while(lastRotation == 0.0f) {
@@ -384,134 +415,150 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
     }
 
     // run calibration flow for every ToF sensor
-    if(samples) {
-        uint16_t data[samples] = {};
-        for(uint8_t i = 0; i < 8; i++) {
-            vl53l1x[i].stop();
+    if(preSamples || mainSamples) {
+
+        // ask user whether to skip
+        lcd.fillScreen(Color_Background);
+        lcd.drawText(4, 4, font5x7, "calibration:\ndistance sensors", Color_Text, Color_Background);
+        lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
+        delay(500);
+        if(waitButtonPress(true) <= 1000) {
             
-            // show direction and distance to user
-            uint32_t distance = Config_VL53L1X_LongMode[i] ? 2000 : 1000;
-            lcd.fillScreen(Color_Background);
-            lcd.drawChar(4, 4, font5x7, directions[i][0], Color_Text, Color_Background, 2);
-            lcd.drawChar(16, 4, font5x7, directions[i][1], Color_Text, Color_Background, 2);
-            lcd.drawChar(28, 4, font5x7, ':', Color_Text, Color_Background, 2);
-            lcd.drawChar(40, 4, font5x7, Config_VL53L1X_LongMode[i] ? '2' : '1', Color_Text, Color_Background, 2);
-            lcd.drawChar(52, 4, font5x7, 'm', Color_Text, Color_Background, 2);
-            lcd.drawText(4, 24, font5x7, "press button to start\nhold button to skip", Color_Text, Color_Background);
-            delay(500);
-            if(waitButtonPress() <= 1000) {
-
-                // draw bar chart area
-                lcd.fillScreen(Color_Background);
-                lcd.drawText(2, 2, font5x7, "59\n60\n61\n62\n63\n199\n198\n197\n196\n195\n194", Color_Text, Color_Background);
-                lcd.drawChar(20, 92, font5x7, '1', Color_Text, Color_Background);
-                lcd.drawChar(38, 92, font5x7, '2', Color_Text, Color_Background);
-                lcd.drawChar(62, 92, font5x7, '5', Color_Text, Color_Background);
-                lcd.drawText(80, 92, font5x7, "10", Color_Text, Color_Background);
-                lcd.drawText(98, 92, font5x7, "20", Color_Text, Color_Background);
-                lcd.drawText(122, 92, font5x7, "50", Color_Text, Color_Background);
-                lcd.drawText(140, 92, font5x7, "100", Color_Text, Color_Background);
-                lcd.drawRect(22, 1, 1, 89, Color_Text);
-                lcd.drawRect(40, 1, 1, 89, Color_Text);
-                lcd.drawRect(64, 1, 1, 89, Color_Text);
-                lcd.drawRect(82, 1, 1, 89, Color_Text);
-                lcd.drawRect(100, 1, 1, 89, Color_Text);
-                lcd.drawRect(124, 1, 1, 89, Color_Text);
-                lcd.drawRect(142, 1, 1, 89, Color_Text);
-
-                // delay measurement start to reduce vibrations caused by user
-                delay(1500);
-
-                // record important metrics for every tested viewport center
-                float minDiff = __FLT_MAX__;
-                float minSD = __FLT_MAX__;
-                uint8_t minDiffIdx = 0, minSDIdx = 0;
-                float diffs[sizeof(testViewports)] = {};
-                float sds[sizeof(testViewports)] = {};
-                for(uint8_t j = 0; j < sizeof(testViewports); j++) {
-
-                    // set test viewport
-                    vl53l1x[i].setROI(6, 4, testViewports[j]);
-
-                    // start measurements
-                    vl53l1x[i].start();
-                    float avg = 0;
-                    for(uint32_t k = 0; k < samples; k++) {
-                        delay(1);
-                        while(digitalReadFast(Pins_VL53L1X_INT[i]) == LOW) yield();
-                        vl53l1x[i].getDistance(data + k);
-                        avg += data[k];
-                    }
-                    vl53l1x[i].stop();
-
-                    // calculate average and difference to expected value
-                    avg /= samples;
-                    float diff = abs(avg - distance);
-                    diffs[j] = diff;
-                    if(diff < minDiff) {
-                        minDiff = diff;
-                        minDiffIdx = j;
-                    }
-
-                    // calculate standard deviation
-                    float sd = 0;
-                    for(uint32_t k = 0; k < samples; k++) sd += sq(data[k] - avg);
-                    sd = sqrt(sd / samples);
-                    sds[j] = sd;
-                    if(sd < minSD) {
-                        minSD = sd;
-                        minSDIdx = j;
-                    }
-
-                    // show bars
-                    if(diff > 1.0f) lcd.drawRect(22, 2 + (j * 8), (log10(diff) * 60.0f) + 0.5f, 3, avg > distance ? Color_Diff_Pos : Color_Diff_Neg);
-                    if(sd > 1.0f) lcd.drawRect(22, 6 + (j * 8), (log10(sd) * 60.0f) + 0.5f, 3, Color_SD_Bar);
-                }
+            uint16_t data[mainSamples] = {};
+            const uint32_t expectedSum = distance * preSamples;
+            for(uint8_t i = 0; i < 8; i++) {
+                if(!vl53l1x[i].stop()) sensorError[i] = true;
                 
-                // try to find best ROI center
-                uint8_t bestIdx = minDiffIdx;
-                if(diffs[minSDIdx] < (minDiff * 1.125f)) bestIdx = minSDIdx;
+                // show direction and distance to user
+                lcd.fillScreen(Color_Background);
+                lcd.drawChar(4, 4, font5x7, directions[i][0], Color_Text, Color_Background, 2);
+                lcd.drawChar(16, 4, font5x7, directions[i][1], Color_Text, Color_Background, 2);
+                lcd.drawChar(28, 4, font5x7, ':', Color_Text, Color_Background, 2);
+                lcd.drawText(40, 4, font5x7, String(distance).c_str(), Color_Text, Color_Background, 2);
+                lcd.drawText(4, 24, font5x7, "press button to start\nhold button to skip", Color_Text, Color_Background);
+                delay(500);
+                if(waitButtonPress(true) <= 1000) {
 
-                // show best ROI center
-                float bestDiff = diffs[bestIdx];
-                float bestSD = sds[bestIdx];
-                if(bestDiff > 1.0f) lcd.drawRect(22, 2 + (bestIdx * 8), (log10(bestDiff) * 60.0f) + 0.5f, 3, Color_Best_Bars);
-                if(bestSD > 1.0f) lcd.drawRect(22, 6 + (bestIdx * 8), (log10(bestSD) * 60.0f) + 0.5f, 3, Color_Best_Bars);
-                lcd.drawText(2, 109, font5x7, ("diff: " + String(bestDiff) + " mm\nsd: " + String(bestSD) + " mm").c_str(), Color_Best_Bars, Color_Background);
+                    // draw bar chart area
+                    lcd.fillScreen(Color_Background);
+                    lcd.drawChar(20, 92, font5x7, '1', Color_Text, Color_Background);
+                    lcd.drawChar(38, 92, font5x7, '2', Color_Text, Color_Background);
+                    lcd.drawChar(62, 92, font5x7, '5', Color_Text, Color_Background);
+                    lcd.drawText(80, 92, font5x7, "10", Color_Text, Color_Background);
+                    lcd.drawText(98, 92, font5x7, "20", Color_Text, Color_Background);
+                    lcd.drawText(122, 92, font5x7, "50", Color_Text, Color_Background);
+                    lcd.drawText(140, 92, font5x7, "100", Color_Text, Color_Background);
+                    lcd.drawRect(22, 1, 1, 89, Color_Text);
+                    lcd.drawRect(40, 1, 1, 89, Color_Text);
+                    lcd.drawRect(64, 1, 1, 89, Color_Text);
+                    lcd.drawRect(82, 1, 1, 89, Color_Text);
+                    lcd.drawRect(100, 1, 1, 89, Color_Text);
+                    lcd.drawRect(124, 1, 1, 89, Color_Text);
+                    lcd.drawRect(142, 1, 1, 89, Color_Text);
 
-                // apply new viewport center
-                vl53l1xViewportCenters[i] = testViewports[bestIdx];
-                vl53l1x[i].setROI(6, 4, vl53l1xViewportCenters[i]);
-                vl53l1x[i].start();
+                    // delay measurement start to reduce vibrations caused by user
+                    delay(1000);
 
-                // wait for user input to continue
-                waitButtonPress();
+                    // find best viewport center range using binary search
+                    uint32_t lastSum = 0;
+                    int8_t mid = 0;
+                    uint8_t step = 4;
+                    while(step > 0) {
+
+                        // start sensor with test configuration
+                        if(!vl53l1x[i].setROI(0, mid - 6, 6, 4)) sensorError[i] = true;
+                        if(!vl53l1x[i].start()) sensorError[i] = true;
+
+                        // perform test measurements and calculate sum
+                        uint32_t sum = 0;
+                        for(uint32_t j = 0; j < preSamples; j++) {
+                            delay(1);
+                            while(digitalReadFast(Pins_VL53L1X_INT[i]) == LOW) yield();
+                            uint16_t measurement = 0;
+                            vl53l1x[i].getDistance(&measurement);
+                            sum += measurement;
+                        }
+                    }
+                    if(mid < -4) mid = -4;
+                    if(mid > 4) mid = 4;
+
+                    for(int8_t j = -2; j < 2; j++) lcd.drawText(4, 4, font5x7, String(mid + j).c_str(), Color_Text, Color_Background, 2);
+
+                    // record important metrics for every tested viewport center
+                    float minDiff = __FLT_MAX__;
+                    int8_t minDiffIdx = 0;
+                    for(int8_t j = 0; j < 5; j++) {
+
+                        // start sensor with test configuration
+                        if(!vl53l1x[i].setROI(0, mid + j - 2, 6, 4)) sensorError[i] = true;
+                        if(!vl53l1x[i].start()) sensorError[i] = true;
+
+                        // perform test measurements and find min/max
+                        float avg = 0.0f;
+                        uint16_t min = 0xFFFF;
+                        uint16_t max = 0;
+                        for(uint32_t k = 0; k < mainSamples; k++) {
+                            delay(1);
+                            while(digitalReadFast(Pins_VL53L1X_INT[i]) == LOW) yield();
+                            vl53l1x[i].getDistance(data + k);
+                            avg += data[k];
+                            if(data[k] < min) min = data[k];
+                            if(data[k] > max) max = data[k];
+                        }
+                        if(!vl53l1x[i].stop()) sensorError[i] = true;
+
+                        // calculate average and difference to expected value
+                        avg /= mainSamples;
+                        float diff = abs(avg - distance);
+                        if(diff < minDiff) {
+                            minDiff = diff;
+                            minDiffIdx = j;
+                        }
+
+                        // calculate standard deviation
+                        float sd = 0.0f;
+                        for(uint32_t k = 0; k < mainSamples; k++) sd += sq(data[k] - avg);
+                        sd = sqrt(sd / mainSamples);
+
+                        // show bars
+                        if(diff > 1.0f) lcd.drawRect(22, 2 + (j * 8), (log10(diff) * 60.0f) + 0.5f, 3, avg > distance ? Color_Diff_Pos : Color_Diff_Neg);
+                        if(sd > 1.0f) lcd.drawRect(22, 6 + (j * 8), (log10(sd) * 60.0f) + 0.5f, 3, Color_SD_Bar);
+                    }
+                    
+                    vl53l1xViewportShift[i] = mid + minDiffIdx - 2;
+                    vl53l1x[i].setROI(0, vl53l1xViewportShift[i], 6, 4);
+                    vl53l1x[i].start();
+
+                    // wait for user input to continue
+                    waitButtonPress();
+                }
             }
         }
     }
 
-    if(servoCalibration) {
+    if(servoCalibrationDuration) {
 
         // ask user whether to skip
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nservo center", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
         delay(500);
-        if(waitButtonPress() <= 1000) {
-            delay(500);
-
-            while(false) {
-                setServo(0.0f);
-                float startRotation = getRotation();
-                setVelocity(0.5f);
-                while(getDistance(FrontCenter) > 1000) update();
-                setVelocity(0.0f, false);
-                delay(500);
-                float rotationDifference = getRotation() - startRotation;
+        if(waitButtonPress(true) <= 1000) {
+            float rotationDiff = testServo(servoCalibrationDuration);
+            for(uint16_t stepSize = 1 << max(((uint16_t)log2(abs(rotationDiff * Config_Servo_Angle_To_Duty))) - 2, 1); stepSize > 0; stepSize >> 1) {
+                while(rotationDiff > 0.0f) {
+                    servoCenterDuty -= stepSize;
+                    rotationDiff = testServo(servoCalibrationDuration);
+                }
+                while(rotationDiff < 0.0f) {
+                    servoCenterDuty += stepSize;
+                    rotationDiff = testServo(servoCalibrationDuration);
+                }
             }
 
             lcd.fillScreen(Color_Background);
-            lcd.drawText(4, 4, font5x7, "there's nothing\nhere yet, sorry", Color_Text, Color_Background);
+            lcd.drawText(4, 4, font5x7, ("calibration finished\nservo center: " + String(servoCenterDuty)).c_str(), Color_Text, Color_Background);
+            lcd.drawText(4, 24, font5x7, "press button to save", Color_Text, Color_Background);
 
             // wait for user input to continue
             waitButtonPress();
@@ -521,11 +568,24 @@ void CAR::runCalibration(const uint32_t samples, uint32_t rotationTime, uint32_t
     // write results to sd card
     SD.remove("/config.txt");
     File file = SD.open("/config.txt", FILE_WRITE_BEGIN);
-    for(uint8_t i = 0; i < 8; i++) file.println(vl53l1xViewportCenters[i]);
+    for(uint8_t i = 0; i < 8; i++) file.println(vl53l1xViewportShift[i]);
     file.println(rotationTimeOffset, 8);
     file.println(rotationFactor, 8);
     file.println(servoCenterDuty);
     file.close();
+}
+
+void CAR::runI2cScan() {
+    lcd.fillScreen(Color_Background);
+    I2C *i2cs[] = { &i2c0, &i2c1, &i2c2 };
+    for(uint8_t i = 0; i < (sizeof(i2cs) / sizeof(i2cs[0])); i++) {
+        lcd.drawText(4 + (i * 50), 4, font5x7, ("I2C " + String(i)).c_str(), Color_Text, Color_Background);
+        for(uint8_t j = 1; j < 127; j++) {
+            i2cs[i]->beginTransmission(j);
+            uint8_t result = i2cs[i]->endTransmission();
+            lcd.drawRect(4 + (i * 50) + ((j % 16) * 3), 14 + ((j / 16) * 3), 2, 2, (result == 0) ? Color_Running : ((result == 4) ? Color_Error : Color_Outlines));
+        }
+    }
 }
 
 void writeFile(String filename, String data) {
@@ -537,7 +597,7 @@ void writeFile(String filename, String data) {
 void CAR::runTest() {
 
     // test config
-    constexpr uint8_t sensors[] = { 0, 2, 3 };
+    /*constexpr uint8_t sensors[] = { 0, 2, 3 };
     constexpr uint8_t timings[][2] = { { 33, 33 }, { 50, 50 }, { 100, 100 } };
     constexpr uint32_t totalCycles = (sizeof(timings) / sizeof(timings[0])) * sizeof(testViewports) * 9 * 9;
     constexpr uint32_t sampleCount = 200;
@@ -602,20 +662,7 @@ void CAR::runTest() {
             }
             groupBaseIdx += 81;
         }
-    }
-}
-
-void CAR::setDistanceROI(SENSORS sensor, uint8_t w, uint8_t h) {
-    if(sensor >= 8) return;
-    vl53l1x[sensor].stop();
-    uint8_t idx = 0;
-    for(uint8_t i = 0; i < sizeof(testViewports); i++) if(testViewports[i] == vl53l1xViewportCenters[sensor]) {
-        idx = i;
-        break;
-    }
-    h = constrain(h, 4, 12);
-    vl53l1x[sensor].setROI(constrain(w, 4, 12), h, (8 - ((h + 1) / 2)) < abs((int)(sizeof(testViewports) / 2) - idx) ? testViewports[(idx < (sizeof(testViewports) / 2)) ? ((sizeof(testViewports) / 2) - (8 - ((h + 1) / 2))) : ((sizeof(testViewports) / 2) + (8 - ((h + 1) / 2)))] : vl53l1xViewportCenters[sensor]);
-    vl53l1x[sensor].start();
+    }*/
 }
 
 bool CAR::setLEDs(COLOR8 color) {
@@ -818,7 +865,7 @@ void CAR::update() {
     }
 }
 
-uint32_t CAR::waitButtonPress() {
+bool CAR::waitButtonPress(uint32_t duration) {
 
     // activate button LED
     digitalWriteFast(Pin_Button_LED, HIGH);
@@ -827,13 +874,18 @@ uint32_t CAR::waitButtonPress() {
     while(digitalReadFast(Pin_Button_INT)) yield();
 
     // wait until button is released
-    uint32_t start = millis();
-    while(!digitalReadFast(Pin_Button_INT)) yield();
-    uint32_t end = millis();
+    uint32_t end = millis() + duration;
+    if(duration) {
+        delay(40);
+        while(!digitalReadFast(Pin_Button_INT)) {
+            yield();
+            if(millis() >= end) break;
+        }
+    }
 
     // deactivate button LED
     digitalWriteFast(Pin_Button_LED, LOW);
 
     // return duration in ms
-    return end - start;
+    return millis() >= end;
 }

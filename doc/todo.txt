@@ -1,5 +1,22 @@
-- new power diagrams (open + obstacle)
 - new obstacle video
-- calibration changes + images
 - VL53L1X test diagrams
-- code visualisation
+
+st7735.cpp: rewrite startup code
+
+page 1: swap image?
+page 2:
+page 3:
+page 4:
+page 5:
+page 6:
+page 7:  update current diagrams (open + obstacle)
+page 8:  update calibration description
+page 9:  replace PCB renderings with display images and description
+page 10: reduce text, add code diagrams
+page 11: reduce text, add code diagrams
+page 12: reduce text, add code diagrams
+page 13: update driving description and diagram (3.2)
+page 14:
+page 15:
+page 16: add switch description (4.3)
+page 20: add link to new video

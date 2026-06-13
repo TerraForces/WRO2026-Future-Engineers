@@ -12,6 +12,9 @@
 
 #include <SPI.h>
 
+// macro to convert 8-bit/channel (RGB888) color values to RGB565
+#define RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3))
+
 // structure representing a monospace font used to render ASCII printable characters
 struct font_t {
     uint8_t cw; // character width (in pixels)
@@ -88,12 +91,19 @@ private:
     uint8_t _cs, _dc, _rst;
     uint8_t _w, _h;
 
-    void displayInit(const uint8_t *addr); 
-    void sendCommand(uint8_t commandByte, const uint8_t *dataBytes, uint8_t numDataBytes);
-    void setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+    /// @brief send a command byte followed by data bytes
+    /// @param command byte which should be sent in command mode
+    /// @param data bytes which should be sent in data mode
+    /// @param dataSize size of the data to be sent in bytes
+    /// @param completeTransaction whether a new transaction should be started before and finished after the transfer
+    void sendCommand(uint8_t command, void *data, uint8_t dataSize, bool completeTransaction = true);
 
-    // headless functions, no transaction start or end
-    inline void writeCommand(uint8_t command);
+    /// @brief set address window for the next color data
+    /// @param x x position of the leftmost pixels
+    /// @param y y position of the topmost pixels
+    /// @param w width of the address window
+    /// @param h height of the address window
+    void setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 };
 
 #endif

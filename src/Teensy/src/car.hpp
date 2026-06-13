@@ -114,19 +114,19 @@ namespace CAR {
     void modifyRotationOffset(float change);
 
     /// @brief runs interactive rotation and distance sensor calibration flow
-    /// @param samples number of distance measurements read for each test block (or 0 to skip)
-    /// @param rotationTime time used to analyze noise in rotation measurements in ms (or 0 to skip)
+    /// @param preSamples number of distance measurements read for each sensor in the first test round (or 0 to skip)
+    /// @param mainSamples number of distance measurements read for each sensor in the main test (or 0 to skip)
+    /// @param distance expected distance in front of the sensor while calibration
+    /// @param rotationDuration duration used to analyze noise in rotation measurements in ms (or 0 to skip)
     /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration (or 0 to skip)
-    void runCalibration(const uint32_t samples = 40, uint32_t rotationTime = 30000, uint32_t rotationRounds = 16, bool servoCalibration = true);
+    /// @param servoCalibrationDuration duration of accelerating/driving for each step in ms (or 0 to skip)
+    void runCalibration(const uint32_t preSamples = 4, const uint32_t mainSamples = 40, uint32_t distance = 2000, uint32_t rotationDuration = 30000, uint32_t rotationRounds = 16, uint32_t servoCalibrationDuration = 3000);
+
+    /// @brief runs a complete I2C scan on all bus systems and shows the results on the display
+    void runI2cScan();
 
     /// @brief runs complete VL53L1X sensor test and records data as .obj files (import in Blender)
     void runTest();
-
-    /// @brief changes VL53L1X ROI (range of interest) settings and restarts continous measurements
-    /// @param sensor sensor which should be configured
-    /// @param w width of new ROI
-    /// @param h height of new ROI
-    void setDistanceROI(SENSORS sensor, uint8_t w, uint8_t h);
 
     /// @brief sets camera LED ring colors (min 300us delay between writes required)
     /// @param color color to be displayed on all LEDs
@@ -167,8 +167,9 @@ namespace CAR {
     void update();
 
     /// @brief waits until the start button is pressed (blocking) - activates button LED while waiting
-    /// @returns duration of the button press in ms
-    uint32_t waitButtonPress();
+    /// @param duration if not 0 this function blocks until the button is released or duration has passed (min 40 ms to debounce)
+    /// @returns whether the button has been pressed for duration or longer
+    bool waitButtonPress(uint32_t duration = 0);
 }
 
 #endif
