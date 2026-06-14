@@ -119,8 +119,8 @@ namespace CAR {
     /// @param distance expected distance in front of the sensor while calibration
     /// @param rotationDuration duration used to analyze noise in rotation measurements in ms (or 0 to skip)
     /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration (or 0 to skip)
-    /// @param servoCalibrationDuration duration of accelerating/driving for each step in ms (or 0 to skip)
-    void runCalibration(const uint32_t preSamples = 4, const uint32_t mainSamples = 40, uint32_t distance = 2000, uint32_t rotationDuration = 30000, uint32_t rotationRounds = 16, uint32_t servoCalibrationDuration = 3000);
+    /// @param servoCalibrationSpeed target speed for servo calibration test runs (or <= 0.0f to skip)
+    void runCalibration(const uint32_t preSamples = 4, const uint32_t mainSamples = 40, uint32_t distance = 2000, uint32_t rotationDuration = 30000, uint32_t rotationRounds = 16, float servoCalibrationSpeed = 0.4f);
 
     /// @brief runs a complete I2C scan on all bus systems and shows the results on the display
     void runI2cScan();
