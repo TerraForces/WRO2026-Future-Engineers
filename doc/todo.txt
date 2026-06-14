@@ -1,11 +1,7 @@
 - new obstacle video
 - VL53L1X test diagrams
 
-st7735.cpp: rewrite startup code
-
 page 1: swap image?
-page 2:
-page 3:
 page 4:
 page 5:
 page 6:
@@ -19,4 +15,3 @@ page 13: update driving description and diagram (3.2)
 page 14:
 page 15:
 page 16: add switch description (4.3)
-page 20: add link to new video

@@ -23,7 +23,7 @@ bool VL53L1X::getDistance(uint16_t* distance) {
     VL53L1_RangingMeasurementData_t measurement = {};
     if(VL53L1_GetRangingMeasurementData(&_dev, &measurement) != VL53L1_ERROR_NONE) return false;
     *distance = measurement.RangeMilliMeter;
-    return VL53L1_ClearInterruptAndStartMeasurement(&_dev) == VL53L1_ERROR_NONE;
+    return VL53L1_WrByte(&_dev, 0x0086, 0x01) == VL53L1_ERROR_NONE;
 }
 
 bool VL53L1X::setAddress(uint8_t address) {

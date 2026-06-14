@@ -103,7 +103,8 @@ namespace CAR {
 
     /// @brief runs complete initialisation process - loads configuration on sensors and activates display elements
     /// @param rpi5 whether to activate the object detection on the Raspberry Pi 5
-    void init(bool rpi5 = false);
+    /// @param recordPower whether measurements of voltage and current should be saved to the inserted microSD card
+    void init(bool rpi5 = false, bool recordPower = false);
 
     /// @brief appends a string to the logfile on the inserted sd card
     /// @param str string to append
@@ -143,7 +144,7 @@ namespace CAR {
     /// @param brakes whether to short the motor to decelerate (works only with velocity = 0.0f)
     /// @param acceleration acceleration in relative speed / s²
     /// @param deceleration deceleration in relative speed / s²
-    void setVelocity(float velocity, bool brakes = false, float acceleration = 0.25f, float deceleration = -0.5f);
+    void setVelocity(float velocity, bool brakes = false, float acceleration = 0.4f, float deceleration = -0.5f);
 
     /// @brief sets target servo angle
     /// @param angle target angle in degrees (positive = car will turn left)

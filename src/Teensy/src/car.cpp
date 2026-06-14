@@ -114,9 +114,11 @@ bool sensorActive[12] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 bool sensorWarning[12] = {};
 bool sensorError[12] = {};
 bool rpiActive = false;
+bool recordPower_ = false;
 uint32_t startTime = 0;
 uint8_t uartReadBuffer[50000] = {};
 uint32_t buf = 0;
+File powerFile;
 
 float CAR::getBatteryVoltage() {
     return analogRead(Pin_ADC_Battery) * 0.002519843f;
@@ -168,7 +170,7 @@ float CAR::getRotation() {
     return lastRotation;
 }
 
-void CAR::init(bool rpi5) {
+void CAR::init(bool rpi5, bool recordPower) {
 
     // configure pin modes
     pinMode(0, OUTPUT);
@@ -232,7 +234,7 @@ void CAR::init(bool rpi5) {
     uint32_t rpiTime = millis() + Config_RPI5_Startup_Millis;
 
     // configure ADC channels
-    analogReadAveraging(32);
+    analogReadAveraging(16);
     analogReadRes(12);
 
     // start display
@@ -314,6 +316,14 @@ void CAR::init(bool rpi5) {
     lcd.drawText(4, 12, font5x7, "ready", Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 52, font5x7, (String(getBatteryVoltage(), 2) + " V").c_str(), Color_Text, Color_Background, 2);
+
+    // create power log file
+    if(recordPower) {
+        recordPower_ = true;
+        SD.remove("/power.csv");
+        powerFile = SD.open("/power.csv", FILE_WRITE);
+        powerFile.println("timestamp,conv_current,drive_current,voltage");
+    }
 }
 
 void CAR::logSD(String str) {
@@ -723,6 +733,7 @@ void CAR::showFinish(const char* userData) {
     lcd.drawText(4, 40, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 48, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 56, font5x7, userData, Color_Text, Color_Background);
+    if(recordPower_) powerFile.close();
 }
 
 void CAR::showObjects() {
@@ -878,6 +889,9 @@ void CAR::update() {
             lastRotation -= rotationOffset;
         }
     }
+
+    if(recordPower_) powerFile.printf("%u,%f,%f,%f\n", millis(), getConverterCurrent(), getDriveCurrent(), getBatteryVoltage());
+    digitalToggleFast(13);
 }
 
 bool CAR::waitButtonPress(uint32_t duration) {
