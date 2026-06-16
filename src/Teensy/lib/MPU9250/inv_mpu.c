@@ -2400,7 +2400,7 @@ int mpu_run_6500_self_test(long *gyro, long *accel, unsigned char debug)
 
     int result;
     unsigned char accel_fsr, fifo_sensors, sensors_on;
-    unsigned short gyro_fsr, sample_rate, lpf;
+    unsigned short gyro_fsr, sample_rate = 0, lpf;
     unsigned char dmp_was_on;
 
     if (st.chip_cfg.dmp_on) {
@@ -2496,7 +2496,7 @@ int mpu_run_self_test(long *gyro, long *accel)
 #endif
     int result;
     unsigned char accel_fsr, fifo_sensors, sensors_on;
-    unsigned short gyro_fsr, sample_rate, lpf;
+    unsigned short gyro_fsr, sample_rate = 0, lpf;
     unsigned char dmp_was_on;
 
     if (st.chip_cfg.dmp_on) {

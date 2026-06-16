@@ -139,8 +139,7 @@ void loop() {
     // start curve when detected (cooldown of 1.3 s between curves to prevent driving circles)
     if((timestamp + 1300) < millis()) {
         if(((direction ? (getDistance(FrontRight) > 800) : (getDistance(FrontLeft) > 800)) || (getDistance(FrontCenter) < ((sectionWidth[curveCount & 3] == 2) ? 450 : 350))) 
-            && (getDistance(RearCenter) > 1700)
-            && (getRotation() + (direction ? (curveCount * 90.0f) : (curveCount * -90.0f)) < 7.0f))
+            && (getDistance(RearCenter) > 1700) && (getRotation() + (direction ? (curveCount * 90.0f) : (curveCount * -90.0f)) < 7.0f))
             driveCurve();
     }
 
@@ -283,11 +282,9 @@ void setup() {
     direction = getDistance(FrontRight) > 200;
 
     // leave parking space - first move
-    setServo(direction ? -50.0f : 50.0f);
-    setVelocity(parkSpeed, false, 0.5f);
+    setServo(direction ? -50.0f : 50.0f); setVelocity(parkSpeed, false, 0.5f);
     while(direction ? (getRotation() > -20.0f) : (getRotation() < 20.0f)) update();
-    setVelocity(0.0f, true);
-    wait(250);
+    setVelocity(0.0f, true); wait(250);
 
     // leave parking space - second move
     setServo(direction ? 50.0f : -50.0f);
@@ -453,22 +450,37 @@ void setup() {
                     setServo(direction ? 20.0f : -20.0f);
                     while(abs(getRotation() - startRotation) < 20.0f) update();
                     setServo(direction ? 40.0f : -40.0f);
-                    while(direction ? (getRotation() < (((curveCount - 1) * -90.0f) - 10.0f)) : (getRotation() > (((curveCount - 1) * 90.0f) + 10.0f))) update();
-                    timestamp = millis();
-                    while((getDistance(FrontCenter) > ((((curveCount) & 3) == 0) ? 525 : 360)) || (millis() < (timestamp + 100))) {
-                        setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
-                        update();
+
+                    if(((curveCount) & 3) != 0) {
+                        while(direction ? (getRotation() < (((curveCount - 1) * -90.0f) - 7.0f)) : (getRotation() > (((curveCount - 1) * 90.0f) + 7.0f))) update();
+                        timestamp = millis();
+                        while((getDistance(FrontCenter) > 360) || (millis() < (timestamp + 100))) {
+                            setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
+                            update();
+                        }
+                        setServo(direction ? -40.0f : 40.0f);
+                        while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
+                        nearInnerBorder = false;
                     }
-                    setServo(direction ? -40.0f : 40.0f);
-                    while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
-                    nearInnerBorder = false;
+                    else {
+                        while(direction ? (getRotation() < (((curveCount - 1) * -90.0f) - 55.0f)) : (getRotation() > (((curveCount - 1) * 90.0f) + 55.0f))) update();
+                        timestamp = millis();
+                        while((getDistance(direction ? AngledLeft : AngledRight) > 470) || (millis() < (timestamp + 100))) {
+                            setServo(((getRotation() - ((curveCount) * (direction ? -90.0f : 90.0f))) + (direction ? -50 : 50)) * reactionFactor * -2.0f);
+                            update();
+                        }
+                        setServo(direction ? -40.0f : 40.0f);
+                        while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
+                        nearInnerBorder = false;
+                    }
                 }
             end:
                 timestamp = millis();
                 setVelocity(fastSpeed);
                 while((getDistance(FrontCenter) > 1350) || (millis() < (timestamp + 250))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
-                    wallCorrection();
+                    if((getDistance(FrontCenter) > 1400) && (getDistance(RearCenter) < 1550)) wallCorrection();
+                    else update();
                 }
                 setVelocity(0.0f, true);
                 wait(15);
@@ -495,7 +507,7 @@ void setup() {
         else {
             if(knownObstacles[(curveCount + 1) & 3] == 2) {
                 timestamp = millis();
-                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 510 : 360)) || (millis() < (timestamp + 100))) {
+                while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 550 : 360)) || (millis() < (timestamp + 100))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     update();
                 }
@@ -515,7 +527,7 @@ void setup() {
             while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
             setVelocity(fastSpeed);
             timestamp = millis();
-            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1400 : ((((curveCount + 1) & 3) == 0) ? 800 : 600))) || (millis() < (timestamp + 1000))) {
+            while((getDistance(FrontCenter) > ((knownObstacles[(curveCount + 1) & 3] == 1) ? 1400 : ((((curveCount + 1) & 3) == 0) ? 1000 : 800))) || (millis() < (timestamp + 1500))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 wallCorrection();
             }
@@ -531,7 +543,7 @@ void setup() {
 
     if(knownObstacles[(curveCount + 1) & 3] == 2) {
         timestamp = millis();
-        while((getDistance(FrontCenter) > ((((curveCount + 1) & 3) == 0) ? 500 : 250)) || (millis() < (timestamp + 100))) {
+        while((getDistance(FrontCenter) > 550) || (millis() < (timestamp + 100))) {
             setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             update();
         }

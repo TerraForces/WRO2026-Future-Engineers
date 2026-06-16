@@ -1,6 +1,0 @@
-page 8:  update object detection count, add more information about VL53L1X
-page 9:  replace PCB renderings with display images and description
-page 10: reduce text, add code diagrams
-page 11: reduce text, add code diagrams
-page 12: reduce text, add code diagrams
-page 13: update driving description and diagram (3.2)
