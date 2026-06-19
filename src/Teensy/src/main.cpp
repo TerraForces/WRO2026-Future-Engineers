@@ -8,7 +8,7 @@
 
 // select program
 //#define TEST
-#define OBJECTS
+//#define OBJECTS
 
 #include "car.hpp"
 
@@ -49,14 +49,14 @@ using namespace CAR;
 #ifndef OBJECTS
 
 // angle configuration
-constexpr float curveEnd          =  52.5f;
+constexpr float curveEnd          =  38.0f;
 constexpr float curveServoAngle   =  35.0f;
-constexpr float reactionFactor    = -0.25f;
-constexpr float wallReactionAngle =  10.0f;
+constexpr float reactionFactor    = -0.23f;
+constexpr float wallReactionAngle =  8.0f;
 
 // speed configuration
 constexpr float boostSpeed  = 1.0f;
-constexpr float normalSpeed = 0.8f;
+constexpr float normalSpeed = 1.0f;
 
 // global memory
 bool boost = false; // whether the speed boost mode is active
@@ -79,7 +79,7 @@ void driveCurve() {
     // reached end of curve - activate speed boost
     setServo(0.0f);
     timestamp = millis();
-    setVelocity(boostSpeed, false, 0.5f, -0.3f);
+    setVelocity(boostSpeed, false, 1.0f, -0.3f);
     boost = true;
     curveCount++;
 }
@@ -90,7 +90,7 @@ void setup() {
     CAR::start();
 
     // start driving
-    setVelocity(normalSpeed, false, 0.4f, -0.4f);
+    setVelocity(normalSpeed, false, 1.0f, -0.4f);
 
     // find starting section width
     sectionWidth[0] = ((getDistance(FrontLeft) + getDistance(FrontRight)) > 750) + 1;
@@ -137,24 +137,24 @@ void loop() {
     update();
 
     // start curve when detected (cooldown of 1.3 s between curves to prevent driving circles)
-    if((timestamp + 1300) < millis()) {
-        if(((direction ? (getDistance(FrontRight) > 800) : (getDistance(FrontLeft) > 800)) || (getDistance(FrontCenter) < ((sectionWidth[curveCount & 3] == 2) ? 450 : 350))) 
+    if((timestamp + 1000) < millis()) {
+        if(((direction ? (getDistance(FrontRight) > 800) : (getDistance(FrontLeft) > 800)) || (getDistance(FrontCenter) < ((sectionWidth[curveCount & 3] == 2) ? 900 : 400))) 
             && (getDistance(RearCenter) > 1700)
             && (getRotation() + (direction ? (curveCount * 90.0f) : (curveCount * -90.0f)) < 7.0f))
             driveCurve();
     }
 
     // drive away from the left wall when getting too close (< 15 cm) and next curve is far enough away (> 80 cm)
-    else if((getDistance(FrontLeft) < 150) && (getDistance(FrontCenter) > 800)) {
+    else if((getDistance(FrontLeft) < 120) && (getDistance(FrontCenter) > 950)) {
         setServo(-wallReactionAngle);
-        while(getRotation() > (((direction == 0) ? 90.0f : -90.0f) * curveCount) - 5.0f) update();
+        while(getRotation() > (((direction == 0) ? 90.0f : -90.0f) * curveCount) - 4.0f) update();
         if((timestamp + 800) < millis()) timestamp = millis() - 800;
     }
 
     // drive away from the right wall when getting too close (< 15 cm) and next curve is far enough away (> 80 cm)
-    else if((getDistance(FrontRight) < 150) && (getDistance(FrontCenter) > 800)) {
+    else if((getDistance(FrontRight) < 120) && (getDistance(FrontCenter) > 950)) {
         setServo(wallReactionAngle);
-        while(getRotation() < (((direction == 0) ? 90.0f : -90.0f) * curveCount) + 5.0f) update();
+        while(getRotation() < (((direction == 0) ? 90.0f : -90.0f) * curveCount) + 4.0f) update();
         if((timestamp + 800) < millis()) timestamp = millis() - 800;
     }
 
@@ -216,9 +216,9 @@ constexpr uint16_t wallReactionDistance2StartSector = 470;
 constexpr uint16_t wallReactionDistanceThreshold    = 650;
 
 // speed configuration
-constexpr float normalSpeed = 0.5f;
-constexpr float fastSpeed   = 0.9f;
-constexpr float slowSpeed   = 0.325f;
+constexpr float normalSpeed = 0.4f;
+constexpr float fastSpeed   = 0.82f;
+constexpr float slowSpeed   = 0.275f;
 
 bool direction = 0;             // 0 = counterclockwise, 1 = clockwise
 bool parkingSpace = 0;          // 0 = parking space at the end of the section, 1 = parking space at the beginning of the section (in driving direction)
@@ -588,7 +588,7 @@ void setup() {
                 if((getDistance(FrontCenter) > 1400) && (getDistance(RearCenter) < 1550)) wallCorrection();
                 else update();
             }
-            setVelocity(slowSpeed);
+            setVelocity(slowSpeed, false, 1.0f, -1.0f);
             timestamp = millis();
             while(((getDistance(direction ? FrontRight : FrontLeft) < 1300) || (getDistance(FrontCenter) > 1300)) || (millis() < (timestamp + 100))) {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
@@ -713,9 +713,9 @@ void setup() {
         setVelocity(0.0f, true);
         wait(250);
         setServo(0.0f);
-        setVelocity(-slowSpeed);
+        setVelocity(-slowSpeed, false, 0.8f);
         timestamp = millis();
-        while(((timestamp + 250) > millis()) || (getDistance(FrontCenter) < (parkingSpace ? 1400 : 1600))) {
+        while(((timestamp + 1000) > millis()) || (getDistance(FrontCenter) < (parkingSpace ? 1400 : 1600))) {
             update();
             setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * 2.0f);
         }
