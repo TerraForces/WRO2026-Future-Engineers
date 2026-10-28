@@ -1,10 +1,7 @@
 /**
- * tcs3472.hpp - highly optimized TCS3472 color sensor library
+ * tcs3472.hpp - TCS3472 color sensor library
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // prevent including multiple times
 #ifndef TCS3472_HPP
@@ -19,7 +16,7 @@ struct TCS3472 {
     /// @brief initializes sensor object, no communication with the sensor will be performed
     /// @param i2c i2c bus to use for communication with the sensor
     /// @param address i2c address of the sensor (should always be 0x29)
-    TCS3472(I2C *i2c, uint8_t address = 0x29);
+    TCS3472(I2C& i2c, uint8_t address = 0x29);
 
     /// @brief starts sensor at 16x gain with an integration time of 2.4 ms (time between measurements: 4.8 ms - smallest interval possible)
     /// @returns whether the sensor was successfully configured
@@ -32,7 +29,7 @@ struct TCS3472 {
     bool readColor(void* color, bool includeC = true);
 
 private:
-    I2C *_i2c;
+    I2C& _i2c;
     uint8_t _address;
 };
 

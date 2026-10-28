@@ -1,8 +1,16 @@
+/**
+ * font5x7.hpp - a simple 5 by 7 pixel monospace font
+ * by TerraForces
+ */
+
+// prevent including multiple times
 #ifndef FONT5X7_HPP
 #define FONT5X7_HPP
 
+// include font data structure
 #include "st7735.hpp"
 
+// font pixel data (binary format facilitates design changes)
 const PROGMEM uint8_t bytes5x7[95 * 7] = {
 
     // 32 ' ' (space)
@@ -861,6 +869,7 @@ const PROGMEM uint8_t bytes5x7[95 * 7] = {
     0b00000000
 };
 
+// font data (5x7 pixels size with 1 pixel spacing horizontally and vertically)
 constexpr font_t font5x7 = {
     5, 7, 6, 8, bytes5x7
 };

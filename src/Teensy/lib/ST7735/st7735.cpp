@@ -1,10 +1,7 @@
 /**
- * st7735.hpp - highly optimized ST7735 LCD control library
+ * st7735.cpp - ST7735 controlled 160x128 pixels LCD control library
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // include header file
 #include "st7735.hpp"
@@ -67,6 +64,7 @@ startup[] = {               // 7735R init
     0x29, 0x80,             // 21: Main screen turn on, no args w/delay
     100                     //     100 ms delay
 };
+
 SPISettings settings = SPISettings(32000000, MSBFIRST, SPI_MODE0);
 
 ST7735::ST7735(SPIClass *spi, uint8_t cs, uint8_t dc, uint8_t rst, bool landscape) : _spi(spi), _cs(cs), _dc(dc), _rst(rst), _w(landscape ? 160 : 128), _h(landscape ? 128 : 160) {}

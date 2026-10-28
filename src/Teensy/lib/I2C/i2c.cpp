@@ -1,12 +1,15 @@
+/**
+ * i2c.cpp - I2C bus interface library (master mode only)
+ * by TerraForces
+ */
+
+// include header file
 #include "i2c.hpp"
 
 #define PINCONFIG (IOMUXC_PAD_ODE | IOMUXC_PAD_SRE | IOMUXC_PAD_DSE(4) | IOMUXC_PAD_SPEED(1) | IOMUXC_PAD_PKE | IOMUXC_PAD_PUE | IOMUXC_PAD_PUS(3) | IOMUXC_PAD_HYS)
 
-//***************************************************
-//  Master Mode
-//***************************************************
-
 FLASHMEM void I2C::begin(uint32_t frequency) {
+
 	// use 24 MHz clock
 	CCM_CSCDR2 = (CCM_CSCDR2 & ~CCM_CSCDR2_LPI2C_CLK_PODF(63)) | CCM_CSCDR2_LPI2C_CLK_SEL;
 	hardware.clock_gate_register |= hardware.clock_gate_mask;
@@ -14,9 +17,10 @@ FLASHMEM void I2C::begin(uint32_t frequency) {
 	IMXRT_LPI2C_t* port = (IMXRT_LPI2C_t*)portAddr;
 	port->MCR = LPI2C_MCR_RST;
 	setClock(frequency);
-	// setSDA() & setSCL() may be called before or after begin()
-	configSDApin(sda_pin_index_); // Setup SDA register
-	configSCLpin(scl_pin_index_); // setup SCL register
+
+	// configure pin registers
+	configSDApin(sda_pin_index_);
+	configSCLpin(scl_pin_index_);
 }
 
 uint32_t I2C::write(uint8_t data) {
@@ -38,24 +42,6 @@ uint32_t I2C::write(const void *data, uint32_t size) {
 	}
 	return 0;
 }
-
-void I2C::beginTransmission(uint8_t address) {
-	txBuffer[0] = (address << 1);
-	transmitting = 1;
-	txBufferLength = 1;
-}
-
-// 2      BBF = Bus Busy Flag
-// 1      MBF = Master Busy Flag
-//   40   DMF = Data Match Flag
-//   20   PLTF = Pin Low Timeout Flag
-//   10   FEF = FIFO Error Flag
-//   08   ALF = Arbitration Lost Flag
-//   04   NDF = NACK Detect Flag
-//   02   SDF = STOP Detect Flag
-//   01   EPF = End Packet Flag
-//      2 RDF = Receive Data Flag
-//      1 TDF = Transmit Data Flag
 
 bool I2C::wait_idle() {
 	IMXRT_LPI2C_t* port = (IMXRT_LPI2C_t*)portAddr;
@@ -112,14 +98,13 @@ uint8_t I2C::endTransmission(uint8_t sendStop) {
 		if (status & LPI2C_MSR_NDF) {
 			port->MCR |= LPI2C_MCR_RTF | LPI2C_MCR_RRF; // clear FIFOs
 			port->MTDR = LPI2C_MTDR_CMD_STOP;
-			return 2; // NACK
+			return 2; // NACK (assume address)
 		}
 		if ((status & LPI2C_MSR_PLTF) || timeout > 50) {
 			port->MCR |= LPI2C_MCR_RTF | LPI2C_MCR_RRF; // clear FIFOs
 			port->MTDR = LPI2C_MTDR_CMD_STOP; // try to send a stop
 			return 4; // clock stretched too long or generic timeout
 		}
-		// are we done yet?
 		if (tx_index > tx_len) {
 			uint32_t tx_fifo = port->MFSR & 0x07;
 			if (tx_fifo == 0 && ((status & LPI2C_MSR_SDF) || !sendStop)) {
@@ -221,32 +206,6 @@ bool I2C::force_clock() {
 	return ret;
 }
 
-//***************************************************
-//  Slave Mode
-//***************************************************
-
-void I2C::beginSlave(uint8_t address) {
-	IMXRT_LPI2C_t* port = (IMXRT_LPI2C_t*)portAddr;
-	CCM_CSCDR2 = (CCM_CSCDR2 & ~CCM_CSCDR2_LPI2C_CLK_PODF(63)) | CCM_CSCDR2_LPI2C_CLK_SEL;
-	hardware.clock_gate_register |= hardware.clock_gate_mask;
-	// setSDA() & setSCL() may be called before or after begin()
-	configSDApin(sda_pin_index_); // Setup SDA register
-	configSCLpin(scl_pin_index_); // setup SCL register
-	port->SCR = LPI2C_SCR_RST;
-	port->SCR = 0;
-	port->SCFGR1 = LPI2C_SCFGR1_TXDSTALL | LPI2C_SCFGR1_RXSTALL; // page 2841
-	port->SCFGR2 = 0; // page 2843;
-	port->SAMR = LPI2C_SAMR_ADDR0(address);
-	attachInterruptVector(hardware.irq_number, hardware.irq_function);
-	NVIC_SET_PRIORITY(hardware.irq_number, 144);
-	NVIC_ENABLE_IRQ(hardware.irq_number);
-	port->SIER = LPI2C_SIER_TDIE |  LPI2C_SIER_RDIE | LPI2C_SIER_SDIE;
-	transmitting = 0;
-	slave_mode = 1;
-	port->SCR = LPI2C_SCR_SEN;
-}
-
-
 void I2C::isr() {
 	IMXRT_LPI2C_t* port = (IMXRT_LPI2C_t*)portAddr;
 	uint32_t status = port->SSR;
@@ -278,7 +237,7 @@ void I2C::isr() {
 		}
 	}
 
-	if (status & LPI2C_SSR_SDF) { // Stop
+	if ((status & LPI2C_SSR_SDF) || (status & LPI2C_SSR_RSF)) { // Stop or Repeat Start
 		if (rxBufferLength > 0 && user_onReceive != nullptr) {
 			(*user_onReceive)(rxBufferLength);
 		}
@@ -342,31 +301,6 @@ FLASHMEM void I2C::configSCLpin(uint8_t i) {
 	}
 }
 
-void lpi2c1_isr(void) { i2c0.isr(); }
-void lpi2c3_isr(void) { i2c1.isr(); }
-void lpi2c4_isr(void) { i2c2.isr(); }
-
-PROGMEM constexpr I2C::I2C_Hardware_t I2C::i2c1_hardware = {
-	CCM_CCGR2, CCM_CCGR2_LPI2C1(CCM_CCGR_ON),
-		{{ 18, 3 | 0x10, &IOMUXC_LPI2C1_SDA_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
-		{{ 19, 3 | 0x10, &IOMUXC_LPI2C1_SCL_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
-	IRQ_LPI2C1, &lpi2c1_isr
-};
-
-PROGMEM constexpr I2C::I2C_Hardware_t I2C::i2c3_hardware = {
-	CCM_CCGR2, CCM_CCGR2_LPI2C3(CCM_CCGR_ON),
-		{{ 17, 1 | 0x10, &IOMUXC_LPI2C3_SDA_SELECT_INPUT, 2 }, { 44, 2 | 0x10, &IOMUXC_LPI2C3_SDA_SELECT_INPUT, 1 }},
-		{{ 16, 1 | 0x10, &IOMUXC_LPI2C3_SCL_SELECT_INPUT, 2 }, { 45, 2 | 0x10, &IOMUXC_LPI2C3_SCL_SELECT_INPUT, 1 }},
-	IRQ_LPI2C3, &lpi2c3_isr
-};
-
-PROGMEM constexpr I2C::I2C_Hardware_t I2C::i2c4_hardware = {
-	CCM_CCGR6, CCM_CCGR6_LPI2C4_SERIAL(CCM_CCGR_ON),
-		{{ 25, 0 | 0x10, &IOMUXC_LPI2C4_SDA_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
-		{{ 24, 0 | 0x10, &IOMUXC_LPI2C4_SCL_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
-	IRQ_LPI2C4, &lpi2c4_isr
-};
-
 // Timeout if a device stretches SCL this long, in microseconds
 #define CLOCK_STRETCH_TIMEOUT 15000
 
@@ -405,6 +339,7 @@ void I2C::setClock(uint32_t frequency) {
 }
 
 bool I2C::readRegs(uint8_t address, uint8_t start, void* data, uint32_t size, bool sendStop) {
+	if(!data) return false;
 	beginTransmission(address);
 	if (txBufferLength >= I2C_BUFFER_LENGTH + 1) return false;
 	txBuffer[txBufferLength++] = start;
@@ -416,6 +351,7 @@ bool I2C::readRegs(uint8_t address, uint8_t start, void* data, uint32_t size, bo
 }
 
 bool I2C::readDRegs(uint8_t address, uint16_t start, void* data, uint32_t size, bool sendStop) {
+	if(!data) return false;
 	for(uint8_t i = 0; i < 5; i++) {
 		beginTransmission(address);
 		if (txBufferLength >= I2C_BUFFER_LENGTH + 2) return false;
@@ -430,6 +366,7 @@ bool I2C::readDRegs(uint8_t address, uint16_t start, void* data, uint32_t size, 
 }
 
 bool I2C::writeRegs(uint8_t address, uint8_t start, void* data, uint32_t size) {
+	if(!data) return false;
 	beginTransmission(address);
 	if (txBufferLength >= I2C_BUFFER_LENGTH + 1 + size) return false;
 	txBuffer[txBufferLength++] = start;
@@ -439,6 +376,7 @@ bool I2C::writeRegs(uint8_t address, uint8_t start, void* data, uint32_t size) {
 }
 
 bool I2C::writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size) {
+	if(!data) return false;
 	beginTransmission(address);
 	if (txBufferLength >= I2C_BUFFER_LENGTH + 2 + size) return false;
 	txBuffer[txBufferLength++] = start >> 8;
@@ -449,6 +387,31 @@ bool I2C::writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size)
 	txBufferLength += size;
 	return !endTransmission();
 }
+
+void lpi2c1_isr(void) { i2c0.isr(); }
+void lpi2c3_isr(void) { i2c1.isr(); }
+void lpi2c4_isr(void) { i2c2.isr(); }
+
+PROGMEM const I2C::I2C_Hardware_t I2C::i2c1_hardware = {
+	CCM_CCGR2, CCM_CCGR2_LPI2C1(CCM_CCGR_ON),
+		{{ 18, 3 | 0x10, &IOMUXC_LPI2C1_SDA_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
+		{{ 19, 3 | 0x10, &IOMUXC_LPI2C1_SCL_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
+	IRQ_LPI2C1, &lpi2c1_isr
+};
+
+PROGMEM const I2C::I2C_Hardware_t I2C::i2c3_hardware = {
+	CCM_CCGR2, CCM_CCGR2_LPI2C3(CCM_CCGR_ON),
+		{{ 17, 1 | 0x10, &IOMUXC_LPI2C3_SDA_SELECT_INPUT, 2 }, { 44, 2 | 0x10, &IOMUXC_LPI2C3_SDA_SELECT_INPUT, 1 }},
+		{{ 16, 1 | 0x10, &IOMUXC_LPI2C3_SCL_SELECT_INPUT, 2 }, { 45, 2 | 0x10, &IOMUXC_LPI2C3_SCL_SELECT_INPUT, 1 }},
+	IRQ_LPI2C3, &lpi2c3_isr
+};
+
+PROGMEM const I2C::I2C_Hardware_t I2C::i2c4_hardware = {
+	CCM_CCGR6, CCM_CCGR6_LPI2C4_SERIAL(CCM_CCGR_ON),
+		{{ 25, 0 | 0x10, &IOMUXC_LPI2C4_SDA_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
+		{{ 24, 0 | 0x10, &IOMUXC_LPI2C4_SCL_SELECT_INPUT, 1 }, { 0xff, 0xff, nullptr, 0 }},
+	IRQ_LPI2C4, &lpi2c4_isr
+};
 
 I2C i2c0(IMXRT_LPI2C1_ADDRESS, I2C::i2c1_hardware);
 I2C i2c1(IMXRT_LPI2C3_ADDRESS, I2C::i2c3_hardware);

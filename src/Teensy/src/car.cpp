@@ -3,21 +3,16 @@
  * by TerraForces
  */
 
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
-
 // include header file
 #include "car.hpp"
 
-// include Arduino framework headers
-#include <Arduino.h>
-#include <core_pins.h>
+// include SD library
 #include <SD.h>
 
 // include sensor and display libraries
-#include "ds18b20.hpp"
+#include <DallasTemperature.h>
 #include "font5x7.hpp"
-#include "mpu9250.hpp"
+#include "icm20948.hpp"
 #include "neopixel.hpp"
 #include "st7735.hpp"
 #include "tcs3472.hpp"
@@ -61,9 +56,8 @@ constexpr uint8_t Pin_VL53L1X_SHT_FC_RR = 36; //    out - front center and rear 
 constexpr uint8_t Pin_VL53L1X_SHT_FL_RC = 2;  //    out - front left and rear center VL53L1X combined shutdown pin
 constexpr uint8_t Pins_VL53L1X_INT[8]   = { 35, 4, 3, 6, 9, 34, 33, 39 }; // in - VL53L1X data ready interrupt pins
 
-// lcd color configuration
+// lcd color configuration (purely cosmetic, but colors should be easily distinguishable, especially background color from all other ones)
 constexpr uint16_t Color_Background = RGB565(0x00, 0x00, 0x00);
-constexpr uint16_t Color_Best_Bars  = RGB565(0x00, 0xFF, 0x00);
 constexpr uint16_t Color_Diff_Neg   = RGB565(0x90, 0x00, 0x00);
 constexpr uint16_t Color_Diff_Pos   = RGB565(0xFF, 0x00, 0x00);
 constexpr uint16_t Color_Error      = RGB565(0xFF, 0x00, 0x00);
@@ -75,53 +69,61 @@ constexpr uint16_t Color_Text       = RGB565(0xFF, 0xFF, 0xFF);
 constexpr uint16_t Color_Warning    = RGB565(0xFF, 0xFF, 0x00);
 
 // misc configuration
-constexpr uint8_t  Config_DS18B20_Conv_Addr[8]   = { 0x28, 0x61, 0x64, 0x0a, 0x55, 0x27, 0xd1, 0x17 };
-constexpr uint8_t  Config_DS18B20_MOSFET_Addr[8] = { 0x28, 0x61, 0x64, 0x0a, 0x4a, 0x1c, 0xf7, 0xf2 };
-constexpr float    Config_Drive_PWM_Freq         = 2959.955f;
-constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000; // us
-constexpr uint32_t Config_RPI5_Startup_Millis    = 40000;
-constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;
-constexpr float    Config_Servo_Max_Angle        = 50.0f;
+constexpr uint8_t  Config_DS18B20_Conv_Addr[8]   = { 0x28, 0x61, 0x64, 0x0a, 0x55, 0x27, 0xd1, 0x17 }; // hardware address of the DS18B20 next to the voltage converters, needs to be changed when replaced by another sensor
+constexpr uint8_t  Config_DS18B20_MOSFET_Addr[8] = { 0x28, 0x61, 0x64, 0x0a, 0x4a, 0x1c, 0xf7, 0xf2 }; // hardware address of the DS18B20 next to the drive MOSFET, needs to be changed when replaced by another sensor
+constexpr float    Config_Drive_PWM_Freq         = 2959.955f; // frequency of the drive MOSFET PWM signal
+constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000;     // interval at which the drive PWM duty cycle is being updated (in us)
+constexpr uint32_t Config_RPI5_Startup_Millis    = 0;         // max startup time for the Raspberry Pi 5 before a power reboot is being forced (or 0 to disable)
+constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;   // servo angle to PWM duty value conversion factor, depends on gear ratio
+constexpr float    Config_Servo_Max_Angle        = 50.0f;     // max angle (to both directions from the center position) that is allowed for the servo to travel to
 
-// configuration on sd card
+// configuration values stored on the sd card
 int8_t vl53l1xViewportShift[8] = {};
-float rotationTimeOffset = 0.0f, rotationFactor = 0.5f;
+float rotationTimeOffset = 0.0f;
+float rotationFactor = 0.5f;
 uint16_t servoCenterDuty = 33033;
 
 // bus, display and sensor objects
+ICM20948 imu(i2c2);
 OneWire oneWire(Pin_DS18B20_OneWire);
-DS18B20 ds18b20(&oneWire);
-MPU9250 imu(i2c2, 30.0f);
+DallasTemperature ds18b20(&oneWire);
 NeoPixel leds(Pin_NeoPixel);
 ST7735 lcd(&SPI1, Pin_LCD_CS, Pin_LCD_DC, Pin_LCD_RST, true);
-TCS3472 tcs3472(&i2c2);
+TCS3472 tcs3472(i2c2);
 VL53L1X vl53l1x[8] = { &i2c1, &i2c1, &i2c1, &i2c0, &i2c0, &i2c0, &i2c0, &i2c1 };
 
+// structure containing all data that should be logged periodically
+struct LOGDATA {
+    uint32_t timestamp;   // in us
+    float batteryVoltage; // in V
+    float convCurrent;   // in A
+    float driveCurrent;   // in A
+};
+
 // global memory
+LOGDATA lastLogData = {};
+std::vector<LOGDATA> logData;
 int32_t currentVelocity = 0;
 int32_t targetVelocity = 0;
 int32_t acceleration = 1;
 int32_t deceleration = -1;
-uint32_t nextTempUpdateTime = 0;
 uint32_t nextDriveUpdateTime = 0;
 CAR::COLOR16 lastColor = {};
 uint16_t lastDistance[8] = {};
 std::vector<CAR::OBJECT> lastObjects, currentObjects;
 float lastRotation = 0.0f;
-float lastVoltage = 0.0f;
 float rotationOffset = 0.0f;
 bool sensorActive[12] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 bool sensorWarning[12] = {};
 bool sensorError[12] = {};
 bool rpiActive = false;
-bool recordPower_ = false;
 uint32_t startTime = 0;
 uint8_t uartReadBuffer[50000] = {};
-uint32_t buf = 0;
-File powerFile;
+uint32_t uartTest = 0;
+uint32_t imuError = 0;
 
 float CAR::getBatteryVoltage() {
-    return analogRead(Pin_ADC_Battery) * 0.002519843f;
+    return lastLogData.batteryVoltage;
 }
 
 CAR::COLOR16 CAR::getColor() {
@@ -132,7 +134,7 @@ CAR::COLOR16 CAR::getColor() {
 }
 
 float CAR::getConverterCurrent() {
-    return (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
+    return lastLogData.convCurrent;
 }
 
 float CAR::getConverterTemp() {
@@ -152,7 +154,7 @@ uint16_t CAR::getDistance(SENSORS sensor) {
 }
 
 float CAR::getDriveCurrent() {
-    return (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
+    return lastLogData.driveCurrent;
 }
 
 float CAR::getMosfetTemp() {
@@ -170,7 +172,7 @@ float CAR::getRotation() {
     return lastRotation;
 }
 
-void CAR::init(bool rpi5, bool recordPower) {
+void CAR::init(bool rpi5) {
 
     // configure pin modes
     pinMode(0, OUTPUT);
@@ -252,19 +254,19 @@ void CAR::init(bool rpi5, bool recordPower) {
         configFile.close();
     }
 
-    // start I2C systems
+    // start I2C systems in fast mode
     i2c0.begin(400000);
     i2c1.begin(400000);
     i2c2.begin(400000);
 
     // start IMU
-    sensorError[MPU9250] = !imu.begin();
+    sensorError[IMU] = imuError = imu.begin();
 
-    // start DS18B20 temperature sensors
+    // start DS18B20 temperature sensors at 12-bit resolution
     ds18b20.begin();
     ds18b20.setResolution(12);
 
-    // start VL53L1X distance sensors
+    // enable pairs of VL53L1X sensors (one per bus system) and change their addresses
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_FL_RC, HIGH);
     delay(15);
@@ -283,6 +285,8 @@ void CAR::init(bool rpi5, bool recordPower) {
     delay(15);
     digitalWriteFast(Pin_VL53L1X_SHT_AL_RL, HIGH);
     delay(15);
+
+    // run VL53L1X configuration for every sensor and start continous measurements
     for(uint8_t i = 0; i < 8; i++) {
         if(!vl53l1x[i].begin()) sensorError[i] = true;
         if(!vl53l1x[i].setROI(0, vl53l1xViewportShift[i], 6, 4)) sensorError[i] = true;
@@ -294,46 +298,40 @@ void CAR::init(bool rpi5, bool recordPower) {
     sensorError[TCS3472] = !tcs3472.begin();
 
     if(rpi5) {
+
         // start UART
         Serial7.addMemoryForRead(uartReadBuffer, sizeof(uartReadBuffer));
         Serial7.begin(500000, SERIAL_8N1);
 
-        // wait for RPI5
-        while(Serial7.available() < (int)sizeof(buf)) {
-            if(millis() > rpiTime) {
+        // wait for RPI5 to send the ready/handshake packet
+        while(Serial7.available() < (int)sizeof(uartTest)) {
+
+            // when enabled, force a reboot of the RPI5 after Config_RPI5_Startup_Millis milliseconds
+            if(Config_RPI5_Startup_Millis && (millis() > rpiTime)) {
                 digitalWriteFast(Pin_RPI5_PWR, LOW);
                 delay(2000);
                 digitalWriteFast(Pin_RPI5_PWR, HIGH);
                 Serial7.clear();
                 rpiTime = millis() + Config_RPI5_Startup_Millis;
             }
+
+            // handle background tasks
             yield();
         }
-        Serial7.readBytes((uint8_t*)&buf, sizeof(buf));
+        Serial7.readBytes((uint8_t*)&uartTest, sizeof(uartTest));
         rpiActive = true;
     }
+
+    // show the user that the system is ready (with sensor states and battery voltage)
     for(uint8_t i = 0; i < 10; i++) lcd.drawRect(4 + (i * 16), 4, 8, 4, sensorError[i] ? Color_Error : Color_Running);
     lcd.drawText(4, 12, font5x7, "ready", Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 52, font5x7, (String(getBatteryVoltage(), 2) + " V").c_str(), Color_Text, Color_Background, 2);
-
-    // create power log file
-    if(recordPower) {
-        recordPower_ = true;
-        SD.remove("/power.csv");
-        powerFile = SD.open("/power.csv", FILE_WRITE);
-        powerFile.println("timestamp,conv_current,drive_current,voltage");
-    }
-}
-
-void CAR::logSD(String str) {
-    File logFile = SD.open("/log.txt", FILE_WRITE);
-    logFile.println(str);
-    logFile.close();
+    if(imuError) lcd.drawText(4, 72, font5x7, ("error: 0x" + String(imuError, 16)).c_str(), Color_Error, Color_Background);
 }
 
 void CAR::modifyRotationOffset(float change) {
-    rotationOffset -= change;
+    rotationOffset += change;
 }
 
 constexpr char directions[8][3] = { "FC", "AL", "FL", "RL", "RC", "RR", "FR", "AR" };
@@ -378,10 +376,10 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
 
             // calculate rotation time offset
             float startRotation = 0.0f;
-            imu.getRotation(&startRotation);
+            imu.getRotation(startRotation);
             uint32_t endMillis = millis() + rotationDuration;
             while(millis() < endMillis) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(&lastRotation);
+                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             rotationTimeOffset = (startRotation - lastRotation) / rotationDuration;
         }
@@ -397,7 +395,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         
             // calculate initial rotation
             while(lastRotation == 0.0f) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(&lastRotation);
+                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             float startRotation = lastRotation + (rotationTimeOffset * millis());
 
@@ -406,10 +404,10 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             lcd.drawText(4, 4, font5x7, ("please turn " + String(rotationRounds) + " rounds\nand then press button").c_str(), Color_Text, Color_Background);
             delay(500);
             while(digitalReadFast(Pin_Button_INT)) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(&lastRotation);
+                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             lastRotation += rotationTimeOffset * millis();
-            rotationFactor = (rotationRounds * 360.0f) / (lastRotation - startRotation);
+            rotationFactor = (rotationRounds * 360.0f) / abs(lastRotation - startRotation);
         }
     }
 
@@ -733,7 +731,16 @@ void CAR::showFinish(const char* userData) {
     lcd.drawText(4, 40, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 48, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 56, font5x7, userData, Color_Text, Color_Background);
-    if(recordPower_) powerFile.close();
+    lcd.drawRect(0, 126, 160, 2, Color_Warning);
+
+    // write recorded log data to SD card
+    File logFile = SD.open("/log.csv", FILE_WRITE);
+    logFile.println("timestamp");
+    for(LOGDATA data : logData) logFile.printf("%u\n", data.timestamp);
+    logFile.close();
+
+    // show save confirmation
+    lcd.drawRect(0, 126, 160, 2, Color_Running);
 }
 
 void CAR::showObjects() {
@@ -791,14 +798,14 @@ void CAR::start() {
 
     if(rpiActive) {
         // start object detection
-        Serial7.write((uint8_t*)&buf, sizeof(buf));
+        Serial7.write((uint8_t*)&uartTest, sizeof(uartTest));
     }
 
     // set rotation offset
-    while(!imu.getRotation(&lastRotation)) delay(1);
+    while(!imu.getRotation(lastRotation)) delay(1);
     lastRotation += millis() * rotationTimeOffset;
     lastRotation *= rotationFactor;
-    rotationOffset = lastRotation;
+    rotationOffset = -lastRotation;
 
     // configure drive pins and PWM
     analogWriteRes(16);
@@ -816,10 +823,10 @@ void CAR::start() {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
         }
         if(digitalReadFast(Pin_IMU_INT)) {
-            if(imu.getRotation(&lastRotation)) {
+            if(imu.getRotation(lastRotation)) {
                 lastRotation += millis() * rotationTimeOffset;
                 lastRotation *= rotationFactor;
-                lastRotation -= rotationOffset;
+                lastRotation = rotationOffset;
             }
         }
     }
@@ -828,12 +835,18 @@ void CAR::start() {
 
 void CAR::update() {
 
-    // update drive PWM duty
+    // update drive PWM duty every Config_Drive_PWM_Update_Int microseconds
     uint32_t time = micros();
     if(time > nextDriveUpdateTime) {
         nextDriveUpdateTime = time + Config_Drive_PWM_Update_Int;
+
+        // only update PWM duty if change is needed
         if(currentVelocity != targetVelocity) {
+
+            // disable active breaking if enabled
             digitalWriteFast(Pin_Drive_Brake, LOW);
+
+            // calculate new duty
             if(currentVelocity < 0) {
                 if(targetVelocity < currentVelocity) currentVelocity = max(currentVelocity - acceleration, targetVelocity);
                 else currentVelocity = min(currentVelocity - deceleration, 0);
@@ -852,6 +865,8 @@ void CAR::update() {
                     currentVelocity = max(-acceleration, targetVelocity);
                 }
             }
+
+            // update PWM duty
             analogWrite(Pin_Drive_PWM, abs(currentVelocity));
         }
     }
@@ -883,14 +898,21 @@ void CAR::update() {
 
     // update rotation when IMU data ready interrupt has been sent
     if(digitalReadFast(Pin_IMU_INT)) {
-        if(imu.getRotation(&lastRotation)) {
+        if(imu.getRotation(lastRotation)) {
             lastRotation += millis() * rotationTimeOffset;
             lastRotation *= rotationFactor;
-            lastRotation -= rotationOffset;
+            lastRotation += rotationOffset;
         }
     }
 
-    if(recordPower_) powerFile.printf("%u,%f,%f,%f\n", millis(), getConverterCurrent(), getDriveCurrent(), getBatteryVoltage());
+    // read ADC data
+    lastLogData.timestamp = micros();
+    lastLogData.batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
+    lastLogData.convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
+    lastLogData.driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
+    logData.push_back(lastLogData);
+
+    // toggle onboard LED (helps debugging whether the program is executing this update function)
     digitalToggleFast(13);
 }
 

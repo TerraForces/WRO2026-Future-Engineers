@@ -1,10 +1,7 @@
 /**
- * st7735.hpp - highly optimized ST7735 controlled 160x128 pixels LCD control library
+ * st7735.hpp - ST7735 controlled 160x128 pixels LCD control library
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // prevent including multiple times
 #ifndef ST7735_HPP
@@ -19,20 +16,20 @@
 struct font_t {
     uint8_t cw; // character width (in pixels)
     uint8_t ch; // character height (in pixels)
-    uint8_t cd; // character distance - distance between the leftmost pixels of two consecutive characters on screen
-    uint8_t lh; // line height - distance between the topmost pixels of two character lines
-    const uint8_t* d; // pixel data - array of bytes which present one pixel line each (starting with char 32; saving in program memory recommended)
+    uint8_t cd; // character distance - horizontal distance between the leftmost pixels of two consecutive characters on screen
+    uint8_t lh; // line height - vertical distance between the topmost pixels of two character lines
+    const uint8_t* d; // pixel data - array of bytes which each represent one pixel row (only chars 32 - 126)
 };
 
 // object representing a ST7735 controlled 128x160 LCD display
 struct ST7735 {
 
     /// @brief initializes display object, no communication with the display will be performed
-    /// @param spi pointer to a SPI bus object used for communication with the display
+    /// @param spi pointer to a SPI bus object for communication with the display
     /// @param cs number of the chip select pin connected to the display
     /// @param dc number of the data/command pin connected to the display (sometimes labeled RS)
     /// @param rst number of the reset pin connected to the display (sometimes labeled RES)
-    /// @param landscape whether to use landscape orientation on the display (uses portrait mode otherwise)
+    /// @param landscape whether to use landscape orientation on the display (uses portrait mode if false)
     ST7735(SPIClass *spi, uint8_t cs, uint8_t dc, uint8_t rst, bool landscape = true);
 
     /// @brief starts and configures the display controller
@@ -43,7 +40,7 @@ struct ST7735 {
     /// @param x x position of the leftmost pixels
     /// @param y y position of the topmost pixels
     /// @param f font to be used for the character (determines size and appearence)
-    /// @param c character which should be drawn - only ASCII printable characters (character code 32-127) will be displayed
+    /// @param c character which should be drawn - only ASCII printable characters (character code 32-126) will be displayed
     /// @param fg foreground color used for the active pixels of the character (RGB565 color format)
     /// @param bg background color used to fill the remaining spaces (RGB565 color format)
     /// @param s scale / size factor - equals length of the side of one character pixel
@@ -63,7 +60,7 @@ struct ST7735 {
     /// @param c color value which should be assigned (RGB565 color format)
     void drawPixel(uint8_t x, uint8_t y, uint16_t c);
 
-    /// @brief draws a (solid filled) rectangle on the display
+    /// @brief draws a rectangle (solid fill) on the display
     /// @param x x position of the leftmost pixels
     /// @param y y position of the topmost pixels
     /// @param w width of the rectangle
@@ -71,11 +68,11 @@ struct ST7735 {
     /// @param c color used for all pixels (RGB565 color format)
     void drawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c);
 
-    /// @brief draws a string of characters on the display
+    /// @brief draws multiple characters (zero terminated) on the display
     /// @param x x position of the leftmost pixels
     /// @param y y position of the topmost pixels
     /// @param f font to be used for the characters (determines size and appearence)
-    /// @param t text / string of characters to be drawn - only ASCII printable characters (character code 32-127) will be displayed
+    /// @param t characters to be drawn - only ASCII printable characters (character code 32-127) will be displayed, writing stops when reaching character value 0
     /// @param fg foreground color used for the active pixels of the characters (RGB565 color format)
     /// @param bg background color used to fill the remaining spaces (RGB565 color format)
     /// @param s scale / size factor - equals length of the side of one character pixel
@@ -87,9 +84,9 @@ struct ST7735 {
     void fillScreen(uint16_t c);
     
 private:
-    SPIClass* _spi;
-    uint8_t _cs, _dc, _rst;
-    uint8_t _w, _h;
+    SPIClass* _spi;         // pointer to the SPI bus object
+    uint8_t _cs, _dc, _rst; // numbers of MCU pins connected to the display
+    uint8_t _w, _h;         // display dimensions
 
     /// @brief send a command byte followed by data bytes
     /// @param command byte which should be sent in command mode
@@ -98,7 +95,7 @@ private:
     /// @param completeTransaction whether a new transaction should be started before and finished after the transfer
     void sendCommand(uint8_t command, void *data, uint8_t dataSize, bool completeTransaction = true);
 
-    /// @brief set address window for the next color data
+    /// @brief set address window for the next color data (SPI transaction has to be running)
     /// @param x x position of the leftmost pixels
     /// @param y y position of the topmost pixels
     /// @param w width of the address window

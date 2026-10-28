@@ -1,27 +1,31 @@
 /**
- * neopixel.cpp - highly optimized NeoPixel multi-LED library
+ * neopixel.cpp - NeoPixel multi-LED library
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // include header file
 #include "neopixel.hpp"
 
-// include I/O manipulation functions and macros
+// include I/O manipulation registers, bit masks and macros
 #include <wiring.h>
 
 NeoPixel::NeoPixel(uint8_t pin) : lastEndMicros() { setPin(pin); }
 
 bool NeoPixel::fill(COLOR color, uint32_t count) {
-    if(!count) return true;
+
+    // nothing to do when count is 0
+    if(count == 0) return true;
+
+    // check cooldown with overflow protection (300 us after end of last transaction)
     uint32_t now = micros();
     if(lastEndMicros > now) lastEndMicros = now;
     if((now - lastEndMicros) < 300L) return false;
-    uint8_t *p = (uint8_t*)&color, *end = p + 3, pix, mask;
+
+    // enable cycle counter
     ARM_DEMCR |= ARM_DEMCR_TRCENA;
     ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
+
+    uint8_t *p = (uint8_t*)&color, *end = p + 3, pix, mask;
     uint32_t cyc = ARM_DWT_CYCCNT + (F_CPU_ACTUAL / 800000);
     for(uint32_t i = 0; i < count; i++) {
         while(p < end) {
@@ -42,25 +46,38 @@ bool NeoPixel::fill(COLOR color, uint32_t count) {
     }
     while (ARM_DWT_CYCCNT - cyc < (F_CPU_ACTUAL / 800000));
     interrupts();
+
+    // record microsecond timestamp for cooldown
     lastEndMicros = micros();
     return true;
 }
 
 void NeoPixel::setPin(uint8_t pin) {
+
+    // read registers and bit mask from the lookup table
     set = portSetRegister(pin);
     clr = portClearRegister(pin);
     msk = digitalPinToBitMask(pin);
 }
 
 bool NeoPixel::show(COLOR* colors, uint32_t count) {
-    if(!count) return true;
+    
+    // nothing to do when count is 0
+    if(count == 0) return true;
+
+    // colors has to be a valid pointer
     if(!colors) return false;
+
+    // check cooldown with overflow protection (300 us after end of last transaction)
     uint32_t now = micros();
     if(lastEndMicros > now) lastEndMicros = now;
     if((now - lastEndMicros) < 300L) return false;
-    uint8_t *p = (uint8_t*)colors, *end = p + (3 * count), pix, mask;
+
+    // enable cycle counter
     ARM_DEMCR |= ARM_DEMCR_TRCENA;
     ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
+
+    uint8_t *p = (uint8_t*)colors, *end = p + (3 * count), pix, mask;
     uint32_t cyc = ARM_DWT_CYCCNT + (F_CPU_ACTUAL / 800000);
     while (p < end) {
         pix = *p++;
@@ -78,6 +95,8 @@ bool NeoPixel::show(COLOR* colors, uint32_t count) {
     }
     while (ARM_DWT_CYCCNT - cyc < (F_CPU_ACTUAL / 800000));
     interrupts();
+
+    // record microsecond timestamp for cooldown
     lastEndMicros = micros();
     return true;
 }

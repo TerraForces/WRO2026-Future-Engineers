@@ -3,41 +3,34 @@
  * by TerraForces
  */
 
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
-
 // prevent including multiple times
 #ifndef CAR_HPP
 #define CAR_HPP
 
-// include integer type names and basic framework functions
+// include integer types and Arduino framework functions
 #include <Arduino.h>
+#include <cstdio>
 #include <stdint.h>
+#include <vector>
 
 namespace CAR {
+
+    // NeoPixel LED color (8-bit / channel)
+    struct COLOR8 {
+        uint8_t g, r, b; // transmit order: green, red, blue
+    };
+
+    // TCS3472 color values
+    struct COLOR16 {
+        uint16_t c, r, g, b; // color channel values ranging from 0 to 1023 (clear, red, green, blue)
+    };
 
     // possible object colors
     enum COLORS : uint16_t {
         EMPTY, // no object detected
         RED,   // red traffic sign
         GREEN, // green traffic sign
-        PINK   // pink parking space borders
-    };
-
-    // VL53L1X sensor positions (ordered counterclockwise) and other sensors
-    enum SENSORS : uint8_t {
-        FrontCenter,
-        AngledLeft,
-        FrontLeft,
-        RearLeft,
-        RearCenter,
-        RearRight,
-        FrontRight,
-        AngledRight,
-        TCS3472,
-        MPU9250,
-        DS18B20Conv,
-        DS18B20MOSFET
+        PINK   // pink parking space walls
     };
 
     // description of detected objects
@@ -50,14 +43,20 @@ namespace CAR {
         uint16_t p; // detection probability in 0.1% (0 - 1000)
     };
 
-    // NeoPixel LED color (warning: order is GRB)
-    struct COLOR8 {
-        uint8_t g, r, b;
-    };
-
-    // TCS3472 color values
-    struct COLOR16 {
-        uint16_t c, r, g, b; // color channel values ranging from 0 to 1023
+    // VL53L1X sensor positions relative to driving direction (ordered counterclockwise) and other sensors
+    enum SENSORS : uint8_t {
+        FrontCenter,
+        AngledLeft,
+        FrontLeft,
+        RearLeft,
+        RearCenter,
+        RearRight,
+        FrontRight,
+        AngledRight,
+        TCS3472,
+        IMU,
+        DS18B20Conv,
+        DS18B20MOSFET
     };
 
     /// @brief reads battery voltage
@@ -103,12 +102,7 @@ namespace CAR {
 
     /// @brief runs complete initialisation process - loads configuration on sensors and activates display elements
     /// @param rpi5 whether to activate the object detection on the Raspberry Pi 5
-    /// @param recordPower whether measurements of voltage and current should be saved to the inserted microSD card
-    void init(bool rpi5 = false, bool recordPower = false);
-
-    /// @brief appends a string to the logfile on the inserted sd card
-    /// @param str string to append
-    void logSD(String str);
+    void init(bool rpi5 = false);
 
     /// @brief changes the rotation offset by the specified amount
     /// @param change change of the rotation offset in degrees (positive values result in higher calculated rotation values)
@@ -129,12 +123,12 @@ namespace CAR {
     /// @brief runs complete VL53L1X sensor test and records data as .obj files (import in Blender)
     void runTest();
 
-    /// @brief sets camera LED ring colors (min 300us delay between writes required)
+    /// @brief sets camera LED ring colors (min 300 us delay between writes required)
     /// @param color color to be displayed on all LEDs
     /// @returns true when the color was applied or false when the minimum time between writes hasn't finished yet
     bool setLEDs(COLOR8 color);
 
-    /// @brief sets camera LED ring colors (min 300us delay between writes required)
+    /// @brief sets camera LED ring colors (min 300 us delay between writes required)
     /// @param colors array of LED colors to be displayed
     /// @returns true when the colors were applied or false when the minimum time between writes hasn't finished yet
     bool setLEDs(COLOR8 colors[12]);

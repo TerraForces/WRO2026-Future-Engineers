@@ -1,10 +1,7 @@
 /**
- * vl53l1x.hpp - highly optimized VL53L1X distance sensor library
+ * vl53l1x.hpp - VL53L1X distance sensor library
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // include header file
 #include "vl53l1x.hpp"
@@ -15,7 +12,6 @@ bool VL53L1X::begin() {
     if(VL53L1_DataInit(&_dev) != VL53L1_ERROR_NONE) return false;
     if(VL53L1_StaticInit(&_dev) != VL53L1_ERROR_NONE) return false;
     if(!setTimingBudget(50)) return false;
-    //if(VL53L1_SetXTalkCompensationEnable(&_dev, true) != VL53L1_ERROR_NONE) return false;
     return VL53L1_SetInterruptPolarity(&_dev, 1) == VL53L1_ERROR_NONE;
 }
 

@@ -3,9 +3,6 @@
  * by TerraForces
  */
 
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
-
 // select program
 //#define TEST
 //#define OBJECTS

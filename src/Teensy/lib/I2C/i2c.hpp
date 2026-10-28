@@ -1,10 +1,7 @@
 /**
- * i2c.hpp - highly optimized I2C bus interface library
+ * i2c.hpp - I2C bus interface library (master mode only)
  * by TerraForces
  */
-
-// optimize program for higher execution speed
-#pragma GCC optimize("-Ofast")
 
 // prevent including multiple times
 #ifndef I2C_HPP
@@ -13,11 +10,9 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-#define I2C_BUFFER_LENGTH 255
+#define I2C_BUFFER_LENGTH 136
 
 struct I2C {
-    static const uint8_t cnt_sda_pins = 2;
-	static const uint8_t cnt_scl_pins = 2;
 	typedef struct {
 		const uint8_t 		pin;		// The pin number
 		const uint32_t 		mux_val;	// Value to set for mux;
@@ -28,13 +23,13 @@ struct I2C {
 	typedef struct {
 		volatile uint32_t &clock_gate_register;
 		uint32_t clock_gate_mask;
-		pin_info_t sda_pins[cnt_sda_pins];
-		pin_info_t scl_pins[cnt_scl_pins];
+		pin_info_t sda_pins[2];
+		pin_info_t scl_pins[2];
 		IRQ_NUMBER_t irq_number;
 		void (*irq_function)(void);
 	} I2C_Hardware_t;
+
 	static const I2C_Hardware_t i2c1_hardware;
-	static const I2C_Hardware_t i2c2_hardware;
 	static const I2C_Hardware_t i2c3_hardware;
 	static const I2C_Hardware_t i2c4_hardware;
 
@@ -59,7 +54,11 @@ struct I2C {
     // only master mode
 	void begin(uint32_t frequency = 100000);
     void setClock(uint32_t frequency);
-    void beginTransmission(uint8_t address);
+    void beginTransmission(uint8_t address) {
+		txBuffer[0] = (address << 1);
+		transmitting = 1;
+		txBufferLength = 1;
+	}
     uint8_t endTransmission(uint8_t sendStop = 1);
     uint8_t requestFrom(uint8_t address, uint32_t size, bool sendStop = true);
     
@@ -67,11 +66,6 @@ struct I2C {
     bool readDRegs(uint8_t address, uint16_t start, void* data, uint32_t size, bool sendStop);
     bool writeRegs(uint8_t address, uint8_t start, void* data, uint32_t size);
     bool writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size);
-
-    // only slave mode
-	void beginSlave(uint8_t address);
-	void onReceive(void (*function)(int numBytes)) { user_onReceive = function; }
-	void onRequest(void (*function)(void)) { user_onRequest = function; }
 
 private:
 	void isr(void);
@@ -98,7 +92,6 @@ private:
 	void (*user_onRequest)(void) = nullptr;
 	void (*user_onReceive)(int) = nullptr;
 	friend void lpi2c1_isr(void);
-	friend void lpi2c2_isr(void);
 	friend void lpi2c3_isr(void);
 	friend void lpi2c4_isr(void);
 	friend void sda_rising_isr0(void);
