@@ -4,7 +4,6 @@ This repository contains engineering materials of our self-driven vehicle's mode
 
 ## TODO
 - update gyro sensor in schematic
-- translate descriptions in [v-photos](/v-photos/)
 - translate [energy.png](/schemes/energy.png)
 - write introduction
 - describe [communication protocol](/other/protocol.md)
@@ -12,6 +11,8 @@ This repository contains engineering materials of our self-driven vehicle's mode
 - extend [preparation](/other/preparation.md)
 - upload video and add link to [video.md](/video/video.md)
 - add 3D models to [`models`](/models/)
+- rewrite IMU startup
+- (optimize display startup)
 
 ## Content
 - [`t-photos`](/t-photos/) contains 2 photos of our team (an [official](/t-photos/official.jpg) one and one [funny](/t-photos/funny.jpg) photo with all our team members)

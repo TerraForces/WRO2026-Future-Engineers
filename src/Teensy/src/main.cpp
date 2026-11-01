@@ -4,7 +4,7 @@
  */
 
 // select program
-//#define TEST
+#define TEST
 //#define OBJECTS
 
 #include "car.hpp"

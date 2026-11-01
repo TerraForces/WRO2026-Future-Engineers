@@ -65,11 +65,15 @@ startup[] = {               // 7735R init
     100                     //     100 ms delay
 };
 
+// SPI settings for all transactions - 32 MHz
 SPISettings settings = SPISettings(32000000, MSBFIRST, SPI_MODE0);
 
+// set width and height based on orientation
 ST7735::ST7735(SPIClass *spi, uint8_t cs, uint8_t dc, uint8_t rst, bool landscape) : _spi(spi), _cs(cs), _dc(dc), _rst(rst), _w(landscape ? 160 : 128), _h(landscape ? 128 : 160) {}
 
 void ST7735::begin(bool r180) {
+
+    // start SPI bus and reset display controller
     digitalWriteFast(_cs, HIGH);
     digitalWriteFast(_dc, HIGH);
     _spi->begin();
@@ -79,6 +83,8 @@ void ST7735::begin(bool r180) {
     delay(100);
     digitalWriteFast(_rst, HIGH);
     delay(200);
+
+    // run the configuration process (could be optimzed further in the future)
     const uint8_t* addr = startup;
     uint8_t numCommands = 21;
     while (numCommands--) {
@@ -101,144 +107,257 @@ void ST7735::begin(bool r180) {
 }
 
 void ST7735::drawChar(uint8_t x, uint8_t y, font_t f, char c, uint16_t fg, uint16_t bg, uint8_t s) {
+
+    // only print supported (printable ASCII) characters
     if(c < 32) return;
     if(c > 126) return;
     c -= 32;
+
+    // only fonts with max. 8 pixels of character width are supported
     if(f.cw > 8) return;
+
+    // nothing to do when position is outside of the display
     if(x >= _w) return;
     if(y >= _h) return;
+
+    // calculate scaled character size
     uint8_t w = f.cw * s;
     uint8_t h = f.ch * s;
     if(w == 0) return;
     if(h == 0) return;
+
+    // only draw the visible part of the character
     if((x + w) > _w) w = _w - x;
     if((y + h) > _h) h = _h - y;
-    uint8_t fg0 = fg >> 8;
-    uint8_t fg1 = fg;
-    uint8_t bg0 = bg >> 8;
-    uint8_t bg1 = bg;
+
+    // get character bitmap
+    uint8_t* b = (uint8_t*)f.d + (((f.cw + 7) / 8) * f.ch * c);
+
+    // start SPI transaction
     _spi->beginTransaction(settings);
     digitalWriteFast(_cs, LOW);
+
+    // send address window (write region)
     setAddrWindow(x, y, w, h);
-    uint8_t* b = (uint8_t*)f.d + (((f.cw + 7) / 8) * f.ch * c);
+
+    // save calculations when no scaling is needed
     if(s == 1) {
+
+        // calculate last index that should be written
         uint8_t se = 8 - w;
+
+        // count down rows while writing
         while(h--) {
-            uint8_t bb = *b;
+
+            // write row of pixels
+            uint8_t bb = *(b++);
             for(int8_t i = 7; i >= se; i--) {
-                if(bb & (1 << i)) {
-                    _spi->transfer(fg0);
-                    _spi->transfer(fg1);
-                }
-                else {
-                    _spi->transfer(bg0);
-                    _spi->transfer(bg1);
-                }
+
+                // print foreground color if pixel should be lit, background color otherwise
+                transfer16((bb & (1 << i)) ? fg : bg);
             }
-            b++;
         }
     }
     else {
-        uint8_t hm = h % s;
+
+        // calculate last index that should be written (for w % s it's out of the display but ep is 0)
         uint8_t se = 7 - (w / s);
+
+        // calculate when the character pixel row should be increased
+        uint8_t hm = h % s;
+
+        // calculate number of pixels drawn for the last character pixel
         uint8_t ep = w % s;
+
+        // count down rows while writing
         while(h--) {
+
+            // write row of pixels
             uint8_t bb = *b;
             for(int8_t i = 7; i >= se; i--) {
-                if(bb & (1 << i)) {
-                    for(uint8_t j = 0; j < ((i == se) ? ep : s); j++) {
-                        _spi->transfer(fg0);
-                        _spi->transfer(fg1);
-                    }
-                }
-                else {
-                    for(uint8_t j = 0; j < ((i == se) ? ep : s); j++) {
-                        _spi->transfer(bg0);
-                        _spi->transfer(bg1);
-                    }
-                }
+                bool lit = bb & (1 << i);
+                for(uint8_t j = 0; j < ((i == se) ? ep : s); j++) transfer16(lit ? fg : bg);
             }
-            if(h % s == hm) b++;
+
+            // increment character row after writing s pixel rows
+            if((h % s) == hm) b++;
         }
     }
+
+    // end SPI transaction
     digitalWriteFast(_cs, HIGH);
     _spi->endTransaction();
 }
 
+void ST7735::drawChar(uint8_t x, uint8_t y, font_t f, char c, uint16_t fg, uint8_t s) {
+
+    // only print supported (printable ASCII) characters
+    if(c < 32) return;
+    if(c > 126) return;
+    c -= 32;
+
+    // only fonts with max. 8 pixels of character width are supported
+    if(f.cw > 8) return;
+
+    // nothing to do when position is outside of the display
+    if(x >= _w) return;
+    if(y >= _h) return;
+
+    // calculate scaled character size
+    uint8_t w = f.cw * s;
+    uint8_t h = f.ch * s;
+    if(w == 0) return;
+    if(h == 0) return;
+
+    // only draw the visible part of the character
+    if((x + w) > _w) w = _w - x;
+    if((y + h) > _h) h = _h - y;
+
+    // get character bitmap
+    uint8_t* b = (uint8_t*)f.d + (((f.cw + 7) / 8) * f.ch * c);
+
+    // calculate last index that should be written
+    uint8_t se = ((w % s) == 0) ? (8 - (w / s)) : (7 - (w / s));
+
+    // count down rows while writing
+    while(h) {
+
+        // write row of pixels
+        uint8_t bb = *(b++);
+        for(int8_t i = 7; i >= se; i--) {
+
+            // draw pixel only when lit (drawRect handles screen area fitting)
+            if(bb & (1 << i)) drawRect(x, y, s, s, fg);
+        }
+
+        // decrease remaining rows by rows written
+        if(h > s) h -= s;
+        else h = 0;
+    }
+}
+
 void ST7735::drawImage(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t* c) {
+
+    // nothing to do when the area is 0 or outside of the display
     if(w == 0) return;
     if(h == 0) return;
     if(x >= _w) return;
     if(y >= _h) return;
+
+    // calculate visible size on the display
     uint8_t dw = w;
     if((x + w) > _w) w = _w - x;
     if((y + h) > _h) h = _h - y;
     dw -= w;
+
+    // start SPI transaction
     _spi->beginTransaction(settings);
     digitalWriteFast(_cs, LOW);
+
+    // send address window (write region)
     setAddrWindow(x, y, w, h);
+
+    // transfer color data one row at a time
     while(h--) {
+
+        // only draw until reaching the end of the line
         uint16_t* end = c + w;
         while(c < end) {
-            _spi->transfer(*c >> 8);
-            _spi->transfer(*c);
-            c++;
+
+            // transfer color data
+            transfer16(*(c++));
         }
+
+        // increment color pointer by the number of pixels that have been cut off
         c += dw;
     }
+
+    // end SPI transaction
     digitalWriteFast(_cs, HIGH);
     _spi->endTransaction();
 }
 
 void ST7735::drawPixel(uint8_t x, uint8_t y, uint16_t c) {
+
+    // nothing to do when the pixel is outside of the display
     if(x >= _w) return;
     if(y >= _h) return;
+
+    // start SPI transaction
     _spi->beginTransaction(settings);
     digitalWriteFast(_cs, LOW);
+
+    // send address window (write region)
     setAddrWindow(x, y, 1, 1);
-    _spi->transfer(c >> 8);
-    _spi->transfer(c);
+
+    // transfer color data
+    transfer16(c);
+
+    // end SPI transaction
     digitalWriteFast(_cs, HIGH);
     _spi->endTransaction();
 }
 
 void ST7735::drawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c) {
+
+    // nothing to do when the area is 0 or outside of the display
     if(w == 0) return;
     if(h == 0) return;
     if(x >= _w) return;
     if(y >= _h) return;
+
+    // calculate visible size on the display
     if((x + w) > _w) w = _w - x;
     if((y + h) > _h) h = _h - y;
-    uint8_t c0 = c >> 8;
-    uint8_t c1 = c;
-    uint16_t i = w * h;
+
+    // calculate area
+    uint32_t i = w * h;
+
+    // start SPI transaction
     _spi->beginTransaction(settings);
     digitalWriteFast(_cs, LOW);
+
+    // send address window (write region)
     setAddrWindow(x, y, w, h);
-    while(i--) {
-        _spi->transfer(c0);
-        _spi->transfer(c1);
-    }
+
+    // transfer color data for every pixel
+    while(i--) transfer16(c);
+
+    // end SPI transaction
     digitalWriteFast(_cs, HIGH);
     _spi->endTransaction();
 }
 
 void ST7735::drawText(uint8_t x, uint8_t y, font_t f, const char* t, uint16_t fg, uint16_t bg, uint8_t s, bool w) {
+
+    // calculate scaled character spacings
     uint8_t dx = f.cd * s;
     uint8_t dy = f.lh * s;
+
+    // current x position ("cursor")
     uint8_t p = x;
-    uint8_t mw = w ? (_w - (f.cw * s)) : _w;
+
+    // calculate the maximum position value where drawing is possible
+    uint8_t mp = w ? (_w - (f.cw * s)) : _w;
+
+    // write until the character t is 0 (string termination)
     while(*t) {
+
+        // move cursor to the start of the next line when t is a newline character (10) or end drawing when it would be outside of the screen
         if(*t == '\n') {
             y += dy;
             if(y >= _h) return;
             p = x;
         }
         else {
-            if(p < mw) {
+
+            // draw char and increment position if it still fits on the line
+            if(p < mp) {
                 drawChar(p, y, f, *t, fg, bg, s);
                 p += dx;
             }
+
+            // if text wrapping is enabled, continue writing on the next line if available
             else if(w) {
                 y += dy;
                 if(y >= _h) return;
@@ -252,18 +371,29 @@ void ST7735::drawText(uint8_t x, uint8_t y, font_t f, const char* t, uint16_t fg
 }
 
 void ST7735::fillScreen(uint16_t c) {
+
+    // draw a rectangle in color c over the entire screen
     drawRect(0, 0, _w, _h, c);
 }
 
 void ST7735::sendCommand(uint8_t command, void *data, uint8_t dataSize, bool completeTransaction) {
+
+    // start SPI transaction if requested
     if(completeTransaction) {
         _spi->beginTransaction(settings);
         digitalWriteFast(_cs, LOW);
     }
+
+    // hold DC low while sending the command byte
     digitalWriteFast(_dc, LOW);
     _spi->transfer(command);
     digitalWriteFast(_dc, HIGH);
+
+    // transfer payload data if available
+    //if(dataSize) _spi->transfer(data, dataSize);
     for(uint8_t i = 0; i < dataSize; i++) _spi->transfer(((uint8_t*)data)[i]);
+
+    // end SPI transaction if requested
     if(completeTransaction) {
         digitalWriteFast(_cs, HIGH);
         _spi->endTransaction();
@@ -271,17 +401,22 @@ void ST7735::sendCommand(uint8_t command, void *data, uint8_t dataSize, bool com
 }
 
 void ST7735::setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+
+    // set x range (start, end)
     sendCommand(0x2A, 0, 0, false);
-    _spi->transfer(x >> 8);
-    _spi->transfer(x);
-    uint16_t a = x + w - 1;
-    _spi->transfer(a >> 8);
-    _spi->transfer(a);
+    transfer16(x);
+    transfer16(x + w - 1);
+
+    // set y range (start, end)
     sendCommand(0x2B, 0, 0, false);
-    _spi->transfer(y >> 8);
-    _spi->transfer(y);
-    uint16_t b = y + h - 1;
-    _spi->transfer(b >> 8);
-    _spi->transfer(b);
+    transfer16(y);
+    transfer16(y + h - 1);
+
+    // apply address window
     sendCommand(0x2C, 0, 0, false);
+}
+
+void ST7735::transfer16(uint16_t d) {
+    _spi->transfer(d >> 8);
+    _spi->transfer(d & 0xFF);
 }

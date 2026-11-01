@@ -10,7 +10,7 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-#define I2C_BUFFER_LENGTH 136
+#define I2C_BUFFER_LENGTH 255
 
 struct I2C {
 	typedef struct {
@@ -54,11 +54,7 @@ struct I2C {
     // only master mode
 	void begin(uint32_t frequency = 100000);
     void setClock(uint32_t frequency);
-    void beginTransmission(uint8_t address) {
-		txBuffer[0] = (address << 1);
-		transmitting = 1;
-		txBufferLength = 1;
-	}
+    void beginTransmission(uint8_t address);
     uint8_t endTransmission(uint8_t sendStop = 1);
     uint8_t requestFrom(uint8_t address, uint32_t size, bool sendStop = true);
     

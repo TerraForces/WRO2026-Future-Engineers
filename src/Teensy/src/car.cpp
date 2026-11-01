@@ -101,8 +101,9 @@ struct LOGDATA {
 };
 
 // global memory
-LOGDATA lastLogData = {};
-std::vector<LOGDATA> logData;
+LOGDATA logData[1 << 13] = {};
+LOGDATA* currentLogData = logData;
+LOGDATA* lastLogData = logData + (sizeof(logData) / sizeof(LOGDATA)) - 1;
 int32_t currentVelocity = 0;
 int32_t targetVelocity = 0;
 int32_t acceleration = 1;
@@ -123,7 +124,7 @@ uint32_t uartTest = 0;
 uint32_t imuError = 0;
 
 float CAR::getBatteryVoltage() {
-    return lastLogData.batteryVoltage;
+    return currentLogData->batteryVoltage;
 }
 
 CAR::COLOR16 CAR::getColor() {
@@ -134,7 +135,7 @@ CAR::COLOR16 CAR::getColor() {
 }
 
 float CAR::getConverterCurrent() {
-    return lastLogData.convCurrent;
+    return currentLogData->convCurrent;
 }
 
 float CAR::getConverterTemp() {
@@ -154,7 +155,7 @@ uint16_t CAR::getDistance(SENSORS sensor) {
 }
 
 float CAR::getDriveCurrent() {
-    return lastLogData.driveCurrent;
+    return currentLogData->driveCurrent;
 }
 
 float CAR::getMosfetTemp() {
@@ -260,7 +261,7 @@ void CAR::init(bool rpi5) {
     i2c2.begin(400000);
 
     // start IMU
-    sensorError[IMU] = imuError = imu.begin();
+    sensorError[IMU] = (imuError = imu.begin());
 
     // start DS18B20 temperature sensors at 12-bit resolution
     ds18b20.begin();
@@ -326,7 +327,7 @@ void CAR::init(bool rpi5) {
     for(uint8_t i = 0; i < 10; i++) lcd.drawRect(4 + (i * 16), 4, 8, 4, sensorError[i] ? Color_Error : Color_Running);
     lcd.drawText(4, 12, font5x7, "ready", Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
-    lcd.drawText(4, 52, font5x7, (String(getBatteryVoltage(), 2) + " V").c_str(), Color_Text, Color_Background, 2);
+    lcd.drawText(4, 52, font5x7, (String(analogRead(Pin_ADC_Battery) * 0.002519843f, 2) + " V").c_str(), Color_Text, Color_Background, 2);
     if(imuError) lcd.drawText(4, 72, font5x7, ("error: 0x" + String(imuError, 16)).c_str(), Color_Error, Color_Background);
 }
 
@@ -395,7 +396,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         
             // calculate initial rotation
             while(lastRotation == 0.0f) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
+                imu.getRotation(lastRotation);
             }
             float startRotation = lastRotation + (rotationTimeOffset * millis());
 
@@ -404,7 +405,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             lcd.drawText(4, 4, font5x7, ("please turn " + String(rotationRounds) + " rounds\nand then press button").c_str(), Color_Text, Color_Background);
             delay(500);
             while(digitalReadFast(Pin_Button_INT)) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
+                imu.getRotation(lastRotation);
             }
             lastRotation += rotationTimeOffset * millis();
             rotationFactor = (rotationRounds * 360.0f) / abs(lastRotation - startRotation);
@@ -611,83 +612,6 @@ void CAR::runI2cScan() {
     }
 }
 
-void writeFile(String filename, String data) {
-    File file = SD.open(filename.c_str(), FILE_WRITE);
-    file.print(data);
-    file.close();
-}
-
-void CAR::runTest() {
-
-    // test config
-    /*constexpr uint8_t sensors[] = { 0, 2, 3 };
-    constexpr uint8_t timings[][2] = { { 33, 33 }, { 50, 50 }, { 100, 100 } };
-    constexpr uint32_t totalCycles = (sizeof(timings) / sizeof(timings[0])) * sizeof(testViewports) * 9 * 9;
-    constexpr uint32_t sampleCount = 200;
-
-    // test program
-    lcd.fillScreen(Color_Background);
-    delay(3000);
-    uint32_t remaining = 0;
-    for(uint8_t i = 0; i < (sizeof(timings) / sizeof(timings[0])); i++) remaining += sizeof(testViewports) * 9 * 9 * timings[i][1] * sampleCount;
-    uint16_t data[sizeof(sensors)][sampleCount];
-    uint32_t done = 0;
-    for(uint8_t t = 0; t < (sizeof(timings) / sizeof(timings[0])); t++) {
-        for(uint8_t i = 0; i < sizeof(sensors); i++) {
-            vl53l1x[sensors[i]].setTimingBudget(timings[t][0]);
-            vl53l1x[sensors[i]].setIntermeasurement(timings[t][1]);
-        }
-        for(uint8_t c = 0; c < sizeof(testViewports); c++) {
-            for(uint8_t w = 4; w <= 12; w++) {
-                for(uint8_t h = 4; h <= 12; h++) {
-                    lcd.fillScreen(Color_Background);
-                    lcd.drawText(2, 2, font5x7, (String(done * 100.0f / totalCycles, 1) + "% done\nmin. " + String(remaining / 60000) + "m " + String((remaining / 1000) % 60) + "s\nremaining\n" + String(getBatteryVoltage(), 2) + " V").c_str(), Color_Text, Color_Background, 2);
-                    for(uint8_t i = 0; i < sizeof(sensors); i++) {
-                        vl53l1x[sensors[i]].setROI(w, h, testViewports[c]);
-                        vl53l1x[sensors[i]].start();
-                    }
-                    float avg[sizeof(sensors)] = {};
-                    for(uint32_t s = 0; s < sampleCount; s++) {
-                        delay(5);
-                        for(uint8_t i = 0; i < sizeof(sensors); i++) {
-                            while(digitalReadFast(Pins_VL53L1X_INT[sensors[i]]) == LOW) yield();
-                            vl53l1x[sensors[i]].getDistance(data[i] + s);
-                            avg[i] += data[i][s];
-                        }
-                    }
-                    for(uint8_t i = 0; i < sizeof(sensors); i++) vl53l1x[sensors[i]].stop();
-                    float sd[sizeof(sensors)] = {};
-                    for(uint8_t i = 0; i < sizeof(sensors); i++) {
-                        avg[i] /= sampleCount;
-                        for(uint32_t s = 0; s < sampleCount; s++) sd[i] += sq(data[i][s] - avg[i]);
-                        sd[i] = sqrt(sd[i] / sampleCount);
-                        writeFile("avg" + String(directions[sensors[i]]) + ".obj", "v "+ String(w) + ' ' + String(avg[i]) + ' ' + String(h) + '\n');
-                        writeFile("sd"  + String(directions[sensors[i]]) + ".obj", "v "+ String(w) + ' ' + String(sd[i]) + ' ' + String(h) + '\n');
-                    }
-                    done++;
-                    remaining -= timings[t][1] * sampleCount;
-                }
-            }
-        }
-    }
-    uint32_t groupBaseIdx = 0;
-    for(uint8_t t = 0; t < (sizeof(timings) / sizeof(timings[0])); t++) {
-        for(uint8_t c = 0; c < sizeof(testViewports); c++) {
-            String object = "o TB"+ String(timings[t][0]) + "IM" + String(timings[t][1]) + "VPC" + String(testViewports[c]) + '\n';
-            for(uint8_t i = 0; i < 72; i += 9) {
-                for(uint8_t j = 0; j < 8; j++) {
-                    object += "f " + String(groupBaseIdx + i + j + 1) + ' ' + String(groupBaseIdx + i + j + 2) + ' ' + String(groupBaseIdx + i + j + 10) + "\nf " + String(groupBaseIdx + i + j + 2) + ' ' + String(groupBaseIdx + i + j + 10) + ' ' + String(groupBaseIdx + i + j + 11) + '\n';
-                }
-            }
-            for(uint8_t i = 0; i < sizeof(sensors); i++) {
-                writeFile("avg" + String(directions[sensors[i]]) + ".obj", object);
-                writeFile("sd"  + String(directions[sensors[i]]) + ".obj", object);
-            }
-            groupBaseIdx += 81;
-        }
-    }*/
-}
-
 bool CAR::setLEDs(COLOR8 color) {
     return leds.fill(*(NeoPixel::COLOR*)&color, 12);
 }
@@ -735,8 +659,10 @@ void CAR::showFinish(const char* userData) {
 
     // write recorded log data to SD card
     File logFile = SD.open("/log.csv", FILE_WRITE);
-    logFile.println("timestamp");
-    for(LOGDATA data : logData) logFile.printf("%u\n", data.timestamp);
+    logFile.println("timestamp,battery_voltage,conv_current,drive_current\n");
+    for(LOGDATA* data = logData; data <= currentLogData; data++) logFile.printf(
+        "%u,%.4f,%.4f,%.4f\n", data->timestamp, data->batteryVoltage, data->convCurrent, data->driveCurrent
+    );
     logFile.close();
 
     // show save confirmation
@@ -802,7 +728,7 @@ void CAR::start() {
     }
 
     // set rotation offset
-    while(!imu.getRotation(lastRotation)) delay(1);
+    while(imu.getRotation(lastRotation)) delay(1);
     lastRotation += millis() * rotationTimeOffset;
     lastRotation *= rotationFactor;
     rotationOffset = -lastRotation;
@@ -822,12 +748,10 @@ void CAR::start() {
         for(uint8_t i = 0; i < 8; i++) {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
         }
-        if(digitalReadFast(Pin_IMU_INT)) {
-            if(imu.getRotation(lastRotation)) {
-                lastRotation += millis() * rotationTimeOffset;
-                lastRotation *= rotationFactor;
-                lastRotation = rotationOffset;
-            }
+        if(imu.getRotation(lastRotation) == 0) {
+            lastRotation += millis() * rotationTimeOffset;
+            lastRotation *= rotationFactor;
+            lastRotation += rotationOffset;
         }
     }
     startTime = millis();
@@ -896,21 +820,19 @@ void CAR::update() {
         if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
     }
 
-    // update rotation when IMU data ready interrupt has been sent
-    if(digitalReadFast(Pin_IMU_INT)) {
-        if(imu.getRotation(lastRotation)) {
-            lastRotation += millis() * rotationTimeOffset;
-            lastRotation *= rotationFactor;
-            lastRotation += rotationOffset;
-        }
+    // update rotation
+    if((imuError = imu.getRotation(lastRotation)) == 0) {
+        lastRotation += millis() * rotationTimeOffset;
+        lastRotation *= rotationFactor;
+        lastRotation += rotationOffset;
     }
 
     // read ADC data
-    lastLogData.timestamp = micros();
-    lastLogData.batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
-    lastLogData.convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
-    lastLogData.driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
-    logData.push_back(lastLogData);
+    if(currentLogData < lastLogData) currentLogData++;
+    currentLogData->timestamp = micros();
+    currentLogData->batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
+    currentLogData->convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
+    currentLogData->driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
 
     // toggle onboard LED (helps debugging whether the program is executing this update function)
     digitalToggleFast(13);

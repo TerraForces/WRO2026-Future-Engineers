@@ -59,6 +59,12 @@ bool I2C::wait_idle() {
 	return true;
 }
 
+void I2C::beginTransmission(uint8_t address) {
+	txBuffer[0] = (address << 1);
+	transmitting = 1;
+	txBufferLength = 1;
+}
+
 uint8_t I2C::endTransmission(uint8_t sendStop) {
 	IMXRT_LPI2C_t* port = (IMXRT_LPI2C_t*)portAddr;
 	uint32_t tx_len = txBufferLength;
@@ -237,7 +243,8 @@ void I2C::isr() {
 		}
 	}
 
-	if ((status & LPI2C_SSR_SDF) || (status & LPI2C_SSR_RSF)) { // Stop or Repeat Start
+	//if ((status & LPI2C_SSR_SDF) || (status & LPI2C_SSR_RSF)) { // Stop or Repeat Start
+	if (status & LPI2C_SSR_SDF) { // Stop
 		if (rxBufferLength > 0 && user_onReceive != nullptr) {
 			(*user_onReceive)(rxBufferLength);
 		}

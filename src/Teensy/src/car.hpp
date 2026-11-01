@@ -120,9 +120,6 @@ namespace CAR {
     /// @brief runs a complete I2C scan on all bus systems and shows the results on the display
     void runI2cScan();
 
-    /// @brief runs complete VL53L1X sensor test and records data as .obj files (import in Blender)
-    void runTest();
-
     /// @brief sets camera LED ring colors (min 300 us delay between writes required)
     /// @param color color to be displayed on all LEDs
     /// @returns true when the color was applied or false when the minimum time between writes hasn't finished yet

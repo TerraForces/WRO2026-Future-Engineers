@@ -10,6 +10,9 @@
 // include I2C bus control interface
 #include <i2c.hpp>
 
+// include library (temporary)
+#include "ICM_20948.h"
+
 // ICM-20948 9-axis sensor object
 struct ICM20948 {
 
@@ -46,6 +49,9 @@ private:
     // I2C address for communication
     uint8_t _address;
 
+    // ICM sensor object (temporary)
+    ICM_20948_I2C _icm;
+
     // last rotation measurement
     float _lastRotation = 0.0f;
 
@@ -56,7 +62,7 @@ private:
     uint8_t _lastBank = 0xFF;
 
     // last selected DMP register bank
-    uint8_t _lastDMPBank = 0;
+    uint8_t _lastDMPBank = 0xFF;
 
     /// @brief reads the size of the data in the fifo buffer
     /// @param size fifo content size in bytes

@@ -46,6 +46,15 @@ struct ST7735 {
     /// @param s scale / size factor - equals length of the side of one character pixel
     void drawChar(uint8_t x, uint8_t y, font_t f, char c, uint16_t fg, uint16_t bg, uint8_t s = 1);
 
+    /// @brief draws a single character on the display with no background change - much slower than regular drawChar
+    /// @param x x position of the leftmost pixels
+    /// @param y y position of the topmost pixels
+    /// @param f font to be used for the character (determines size and appearence)
+    /// @param c character which should be drawn - only ASCII printable characters (character code 32-126) will be displayed
+    /// @param fg foreground color used for the active pixels of the character (RGB565 color format)
+    /// @param s scale / size factor - equals length of the side of one character pixel
+    void drawChar(uint8_t x, uint8_t y, font_t f, char c, uint16_t fg, uint8_t s = 1);
+
     /// @brief draws a bitmap on the display
     /// @param x x position of the leftmost pixels
     /// @param y y position of the topmost pixels
@@ -101,6 +110,10 @@ private:
     /// @param w width of the address window
     /// @param h height of the address window
     void setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+
+    /// @brief sends 16 bits of data using SPI
+    /// @param d data to be sent
+    void transfer16(uint16_t d);
 };
 
 #endif
