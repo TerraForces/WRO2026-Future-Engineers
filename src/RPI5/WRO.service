@@ -1,0 +1,11 @@
+[Unit]
+Description=WRO Object Detection
+
+[Service]
+Type=simple
+User=wro
+WorkingDirectory=/home/wro
+ExecStart=/home/wro/Documents/main
+
+[Install]
+WantedBy=multi-user.target

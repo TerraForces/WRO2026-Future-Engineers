@@ -9,59 +9,59 @@
 // ST7735 startup/configuration process
 static const uint8_t PROGMEM
 startup[] = {               // 7735R init
-    0x01, 0x80,             //  1: Software reset, 0 args, w/delay
+    0x01, 0x80,             //  0: Software reset, 0 args, w/delay
     150,                    //     150 ms delay
-    0x11, 0x80,             //  2: Out of sleep mode, 0 args, w/delay
+    0x11, 0x80,             //  1: Out of sleep mode, 0 args, w/delay
     255,                    //     500 ms delay
-    0xB1, 3,                //  3: Framerate ctrl - normal mode, 3 arg:
+    0xB1, 3,                //  2: Framerate ctrl - normal mode, 3 arg:
     0x01, 0x2C, 0x2D,       //     Rate = fosc/(1x2+40) * (LINE+2C+2D)
-    0xB2, 3,                //  4: Framerate ctrl - idle mode, 3 args:
+    0xB2, 3,                //  3: Framerate ctrl - idle mode, 3 args:
     0x01, 0x2C, 0x2D,       //     Rate = fosc/(1x2+40) * (LINE+2C+2D)
-    0xB3, 6,                //  5: Framerate - partial mode, 6 args:
+    0xB3, 6,                //  4: Framerate - partial mode, 6 args:
     0x01, 0x2C, 0x2D,       //     Dot inversion mode
     0x01, 0x2C, 0x2D,       //     Line inversion mode
-    0xB4, 1,                //  6: Display inversion ctrl, 1 arg:
+    0xB4, 1,                //  5: Display inversion control, 1 arg:
     0x07,                   //     No inversion
-    0xC0, 3,                //  7: Power control, 3 args, no delay:
+    0xC0, 3,                //  6: Power control, 3 args, no delay:
     0xA2,
     0x02,                   //     -4.6V
     0x84,                   //     AUTO mode
-    0xC1, 1,                //  8: Power control, 1 arg, no delay:
+    0xC1, 1,                //  7: Power control, 1 arg, no delay:
     0xC5,                   //     VGH25=2.4C VGSEL=-10 VGH=3 * AVDD
-    0xC2, 2,                //  9: Power control, 2 args, no delay:
+    0xC2, 2,                //  8: Power control, 2 args, no delay:
     0x0A,                   //     Opamp current small
     0x00,                   //     Boost frequency
-    0xC3, 2,                // 10: Power control, 2 args, no delay:
+    0xC3, 2,                //  9: Power control, 2 args, no delay:
     0x8A,                   //     BCLK/2,
     0x2A,                   //     opamp current small & medium low
-    0xC4, 2,                // 11: Power control, 2 args, no delay:
+    0xC4, 2,                // 10: Power control, 2 args, no delay:
     0x8A, 0xEE,
-    0xC5, 1,                // 12: Power control, 1 arg, no delay:
+    0xC5, 1,                // 11: Power control, 1 arg, no delay:
     0x0E,
-    0x20, 0,                // 13: Don't invert display, no args
-    0x36, 1,                // 14: Mem access ctl (directions), 1 arg:
+    0x20, 0,                // 12: Don't invert display, no args
+    0x36, 1,                // 13: Mem access ctl (directions), 1 arg:
     0xC8,                   //     row/col addr, bottom-top refresh
-    0x3A, 1,                // 15: set color mode, 1 arg, no delay:
+    0x3A, 1,                // 14: set color mode, 1 arg, no delay:
     0x05,                   //     16-bit color
-    0x2A, 4,                // 16: Column addr set, 4 args, no delay:
+    0x2A, 4,                // 15: Column addr set, 4 args, no delay:
     0x00, 0x00,             //     XSTART = 0
     0x00, 0x7F,             //     XEND = 127
-    0x2B, 4,                // 17: Row addr set, 4 args, no delay:
+    0x2B, 4,                // 16: Row addr set, 4 args, no delay:
     0x00, 0x00,             //     XSTART = 0
     0x00, 0x9F,             //     XEND = 159s
-    0xE0, 16,               // 18: Gamma Adjustments (pos. polarity), 16 args + delay:
+    0xE0, 16,               // 17: Gamma Adjustments (pos. polarity), 16 args + delay:
     0x02, 0x1c, 0x07, 0x12, //     (Not entirely necessary, but provides
     0x37, 0x32, 0x29, 0x2d, //      accurate colors)
     0x29, 0x25, 0x2B, 0x39,
     0x00, 0x01, 0x03, 0x10,
-    0xE1, 16,               // 19: Gamma Adjustments (neg. polarity), 16 args + delay:
+    0xE1, 16,               // 18: Gamma Adjustments (neg. polarity), 16 args + delay:
     0x03, 0x1d, 0x07, 0x06, //     (Not entirely necessary, but provides
     0x2E, 0x2C, 0x29, 0x2D, //      accurate colors)
     0x2E, 0x2E, 0x37, 0x3F,
     0x00, 0x00, 0x02, 0x10,
-    0x13, 0x80,             // 20: Normal display on, no args, w/delay
+    0x13, 0x80,             // 19: Normal display on, no args, w/delay
     10,                     //     10 ms delay
-    0x29, 0x80,             // 21: Main screen turn on, no args w/delay
+    0x29, 0x80,             // 20: Main screen turn on, no args w/delay
     100                     //     100 ms delay
 };
 
@@ -84,20 +84,19 @@ void ST7735::begin(bool r180) {
     digitalWriteFast(_rst, HIGH);
     delay(200);
 
-    // run the configuration process (could be optimzed further in the future)
+    // run the configuration process
     const uint8_t* addr = startup;
     uint8_t numCommands = 21;
     while (numCommands--) {
         uint8_t cmd = *(addr++);
         uint8_t numArgs = *(addr++);
-        uint16_t ms = numArgs & 0x80;
-        numArgs &= ~0x80;
+        uint32_t ms = numArgs & 0x80;
+        numArgs &= 0x7F;
         sendCommand(cmd, (void*)addr, numArgs);
         addr += numArgs;
         if (ms) {
             ms = *(addr++);
-            if (ms == 255) ms = 500;
-            delay(ms);
+            delay((ms == 255) ? 500 : ms);
         }
     }
 

@@ -112,10 +112,10 @@ namespace CAR {
     /// @param preSamples number of distance measurements read for each sensor in the first test round (or 0 to skip)
     /// @param mainSamples number of distance measurements read for each sensor in the main test (or 0 to skip)
     /// @param distance expected distance in front of the sensor while calibration
-    /// @param rotationDuration duration used to analyze noise in rotation measurements in ms (or 0 to skip)
+    /// @param rotationDuration duration used to analyze noise in rotation measurements in us (or 0 to skip)
     /// @param rotationRounds number of revolutions the car should be turned for rotation factor calibration (or 0 to skip)
     /// @param servoCalibrationSpeed target speed for servo calibration test runs (or <= 0.0f to skip)
-    void runCalibration(const uint32_t preSamples = 4, const uint32_t mainSamples = 40, uint32_t distance = 2000, uint32_t rotationDuration = 30000, uint32_t rotationRounds = 16, float servoCalibrationSpeed = 0.4f);
+    void runCalibration(const uint32_t preSamples = 4, const uint32_t mainSamples = 40, uint32_t distance = 2000, uint32_t rotationDuration = 30000000, uint32_t rotationRounds = 16, float servoCalibrationSpeed = 0.4f);
 
     /// @brief runs a complete I2C scan on all bus systems and shows the results on the display
     void runI2cScan();
@@ -159,7 +159,7 @@ namespace CAR {
     void update();
 
     /// @brief waits until the start button is pressed (blocking) - activates button LED while waiting
-    /// @param duration if not 0 this function blocks until the button is released or duration has passed (min 40 ms to debounce)
+    /// @param duration if not 0 this function blocks until the button is released or duration (in us) has passed (min 40000 us to debounce)
     /// @returns whether the button has been pressed for duration or longer
     bool waitButtonPress(uint32_t duration = 0);
 }

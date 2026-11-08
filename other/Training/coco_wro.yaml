@@ -1,4 +1,4 @@
-path: /home/terra/datasets/WRO 2025/YOLO/
+path: ~/datasets/YOLO/
 train: images/train2017
 val: images/val2017
 

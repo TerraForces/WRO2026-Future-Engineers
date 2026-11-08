@@ -8,11 +8,10 @@
             "format": "rgb"
         }
     },
-
     "hailo_yolo_inference":
     {
-        "hef_file": "~/Documents/yolo11s.hef",
+        "hef_file": "/home/wro/Documents/yolo11s.hef",
         "max_detections": 40,
-        "threshold": 0.6
+        "threshold": 0.55
     }
 }

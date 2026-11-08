@@ -49,7 +49,7 @@ def convert_coco(labels_dir, save_dir):
                     file.write("\n")
     
 # convert COCO to YOLO dataset
-convert_coco(labels_dir = "/home/terra/datasets/WRO 2025/COCO/", save_dir = "/home/terra/datasets/WRO 2025/YOLO/")
+convert_coco(labels_dir = "~/datasets/COCO/", save_dir = "~/datasets/YOLO/")
 
 # remove training result directory
 if Path("runs").is_dir():
@@ -60,7 +60,7 @@ model = YOLO("yolo11s.pt")
 
 # train model with YOLO dataset
 train_results = model.train(
-    data = "/media/terra/Volume/08 WRO/WRO-Future-Engineers-2025/WRO RPI5/coco_wro.yaml",
+    data = "coco_wro.yaml",
     epochs = 600,
     workers = 8,
     batch = 0.9,

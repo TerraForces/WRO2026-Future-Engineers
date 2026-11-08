@@ -4,11 +4,12 @@ This repository contains engineering materials of our self-driven vehicle's mode
 
 ## TODO
 - update gyro sensor in schematic
-- translate [energy.png](/schemes/energy.png)
 - write introduction
+- comment the [I2C library](/src/Teensy/lib/I2C/)
+- comment the [NeoPixel update code](/src/Teensy/lib/NeoPixel/neopixel.cpp)
 - describe [communication protocol](/other/protocol.md)
 - extend [hardware information](/other/hardware.md)
-- extend [preparation](/other/preparation.md)
+- extend [preparation](/other/preparation.md) with ATtiny841 preparation
 - upload video and add link to [video.md](/video/video.md)
 - add 3D models to [`models`](/models/)
 - rewrite IMU startup
@@ -21,6 +22,6 @@ This repository contains engineering materials of our self-driven vehicle's mode
 - [`schemes`](/schemes/) contains schematic diagrams of the electromechanical components illustrating all the electronic components and motors used in the vehicle and how they connect to each other
 - [`src`](/src/) contains code of control software for all components which were programmed to participate in the competition
 - [`models`](/models/) contains files used by 3D printers to produce the vehicle parts
-- [`other`](/other/) contains a [description](/other/preparation.md) of how to prepare the vehicle for the competition including hardware assembly and software preparation / upload; this directory also includes a description of our [communication protocol](/other/protocol.md) and additional information about the [hardware](/other/hardware.md)
+- [`other`](/other/) contains a [description](/other/preparation.md) of how to prepare the vehicle for the competition including hardware assembly and software preparation / upload; this directory also includes a description of our [communication protocols](/other/protocols.md) and additional information about the [hardware](/other/hardware.md)
 
 ## Introduction

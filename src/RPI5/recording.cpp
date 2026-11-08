@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <fcntl.h>
 #include <iostream>
-#include <stdio.h>
 #include <string>
 #include <termios.h>
 #include "pstream.h"
@@ -25,22 +24,13 @@ struct OBJECT {
     uint16_t p; // detection probability in 0.1% (0 - 1000)
 };
 
-void logStr(const char* str) {
-    FILE* file = fopen("log.txt", "a");
-    fprintf(file, str);
-    fclose(file);
-}
-
 // program start
 int main() {
-    logStr("0");
 
     // configure and start UART bus at 115200 bits per second
     int32_t uart = open("/dev/ttyAMA0", O_RDWR);
-    logStr("1");
     termios tty;
     tcgetattr(uart, &tty);
-    logStr("2");
     tty.c_cflag &= ~PARENB;
     tty.c_cflag &= ~CSTOPB;
     tty.c_cflag &= ~CSIZE;
@@ -60,24 +50,10 @@ int main() {
     tty.c_cc[VMIN] = 0;
     cfsetispeed(&tty, B500000);
     cfsetospeed(&tty, B500000);
-    logStr("3");
     tcsetattr(uart, TCSANOW, &tty);
-    logStr("4");
-
-    // send ready packet
-    uint32_t buf = 0x12345678;
-    write(uart, &buf, sizeof(buf));
-    logStr("5");
-
-    // wait for start signal
-    buf = 0;
-    while(read(uart, &buf, sizeof(buf)) <= 0);
-    if(buf == 0x12345678) logStr("6");
-    else logStr("X");
 
     // start camera + inference pipeline and capture output (command is using error output for logging)
-    ipstream pipe("rpicam-hello --framerate 50 --hflip --vflip --post-process-file ~/Documents/hailo_yolo11s.json -n -t 0 -v --width 1296 --height 1296", pstreams::pstderr);
-    logStr("7");
+    ipstream pipe("rpicam-vid --framerate 30 --hflip --vflip --post-process-file ~/Documents/hailo_yolo11s.json -t 180000 -v --width 1296 --height 1296 -o obstacles.mp4", pstreams::pstderr);
     
     // read output lines and extract important data
     std::string line;

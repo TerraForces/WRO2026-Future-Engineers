@@ -73,15 +73,15 @@ constexpr uint8_t  Config_DS18B20_Conv_Addr[8]   = { 0x28, 0x61, 0x64, 0x0a, 0x5
 constexpr uint8_t  Config_DS18B20_MOSFET_Addr[8] = { 0x28, 0x61, 0x64, 0x0a, 0x4a, 0x1c, 0xf7, 0xf2 }; // hardware address of the DS18B20 next to the drive MOSFET, needs to be changed when replaced by another sensor
 constexpr float    Config_Drive_PWM_Freq         = 2959.955f; // frequency of the drive MOSFET PWM signal
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000;     // interval at which the drive PWM duty cycle is being updated (in us)
-constexpr uint32_t Config_RPI5_Startup_Millis    = 0;         // max startup time for the Raspberry Pi 5 before a power reboot is being forced (or 0 to disable)
+constexpr uint32_t Config_RPI5_Startup_Micros    = 0;         // max startup time for the Raspberry Pi 5 before a power reboot is being forced (or 0 to disable)
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;   // servo angle to PWM duty value conversion factor, depends on gear ratio
 constexpr float    Config_Servo_Max_Angle        = 50.0f;     // max angle (to both directions from the center position) that is allowed for the servo to travel to
 
 // configuration values stored on the sd card
-int8_t vl53l1xViewportShift[8] = {};
-float rotationTimeOffset = 0.0f;
-float rotationFactor = 0.5f;
-uint16_t servoCenterDuty = 33033;
+int8_t vl53l1xViewportShift[8] = {}; // shifts the viewport center of every VL53L1X sensor vertically
+float rotationTimeOffset = 0.0f;     // value to counteract the steady rotation drift of classic IMUs (in °/us)
+float rotationFactor = 1.0f;         // rotation factor (should always be 1)
+uint16_t servoCenterDuty = 33033;    // PWM duty where the servo lets the vehicle drive perfectly straight
 
 // bus, display and sensor objects
 ICM20948 imu(i2c2);
@@ -96,18 +96,22 @@ VL53L1X vl53l1x[8] = { &i2c1, &i2c1, &i2c1, &i2c0, &i2c0, &i2c0, &i2c0, &i2c1 };
 struct LOGDATA {
     uint32_t timestamp;   // in us
     float batteryVoltage; // in V
-    float convCurrent;   // in A
+    float convCurrent;    // in A
     float driveCurrent;   // in A
 };
 
-// global memory
+// buffer for collected data that is going to be saved after finishing
 LOGDATA logData[1 << 13] = {};
 LOGDATA* currentLogData = logData;
 LOGDATA* lastLogData = logData + (sizeof(logData) / sizeof(LOGDATA)) - 1;
+
+// data required to calculate the (de-)acceleration ramp
 int32_t currentVelocity = 0;
 int32_t targetVelocity = 0;
 int32_t acceleration = 1;
 int32_t deceleration = -1;
+
+// 
 uint32_t nextDriveUpdateTime = 0;
 CAR::COLOR16 lastColor = {};
 uint16_t lastDistance[8] = {};
@@ -120,7 +124,6 @@ bool sensorError[12] = {};
 bool rpiActive = false;
 uint32_t startTime = 0;
 uint8_t uartReadBuffer[50000] = {};
-uint32_t uartTest = 0;
 uint32_t imuError = 0;
 
 float CAR::getBatteryVoltage() {
@@ -234,7 +237,7 @@ void CAR::init(bool rpi5) {
     digitalWriteFast(41, LOW);
 
     // record RPI5 max startup time
-    uint32_t rpiTime = millis() + Config_RPI5_Startup_Millis;
+    uint32_t rpiTime = micros() + Config_RPI5_Startup_Micros;
 
     // configure ADC channels
     analogReadAveraging(16);
@@ -259,6 +262,13 @@ void CAR::init(bool rpi5) {
     i2c0.begin(400000);
     i2c1.begin(400000);
     i2c2.begin(400000);
+
+    if(rpi5) {
+
+        // start UART
+        Serial7.addMemoryForRead(uartReadBuffer, sizeof(uartReadBuffer));
+        Serial7.begin(500000, SERIAL_8N1);
+    }
 
     // start IMU
     sensorError[IMU] = (imuError = imu.begin());
@@ -300,33 +310,28 @@ void CAR::init(bool rpi5) {
 
     if(rpi5) {
 
-        // start UART
-        Serial7.addMemoryForRead(uartReadBuffer, sizeof(uartReadBuffer));
-        Serial7.begin(500000, SERIAL_8N1);
-
         // wait for RPI5 to send the ready/handshake packet
-        while(Serial7.available() < (int)sizeof(uartTest)) {
+        while(Serial7.available() < (int)sizeof(OBJECT)) {
 
-            // when enabled, force a reboot of the RPI5 after Config_RPI5_Startup_Millis milliseconds
-            if(Config_RPI5_Startup_Millis && (millis() > rpiTime)) {
+            // when enabled, force a reboot of the RPI5 after Config_RPI5_Startup_Micros microseconds
+            if(Config_RPI5_Startup_Micros && (micros() > rpiTime)) {
                 digitalWriteFast(Pin_RPI5_PWR, LOW);
                 delay(2000);
                 digitalWriteFast(Pin_RPI5_PWR, HIGH);
                 Serial7.clear();
-                rpiTime = millis() + Config_RPI5_Startup_Millis;
+                rpiTime = micros() + Config_RPI5_Startup_Micros;
             }
 
             // handle background tasks
             yield();
         }
-        Serial7.readBytes((uint8_t*)&uartTest, sizeof(uartTest));
         rpiActive = true;
     }
 
     // show the user that the system is ready (with sensor states and battery voltage)
     for(uint8_t i = 0; i < 10; i++) lcd.drawRect(4 + (i * 16), 4, 8, 4, sensorError[i] ? Color_Error : Color_Running);
     lcd.drawText(4, 12, font5x7, "ready", Color_Text, Color_Background, 2);
-    lcd.drawText(4, 32, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
+    lcd.drawText(4, 32, font5x7, (String(micros() / 1000000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 52, font5x7, (String(analogRead(Pin_ADC_Battery) * 0.002519843f, 2) + " V").c_str(), Color_Text, Color_Background, 2);
     if(imuError) lcd.drawText(4, 72, font5x7, ("error: 0x" + String(imuError, 16)).c_str(), Color_Error, Color_Background);
 }
@@ -366,7 +371,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation time offset", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
-        if(!waitButtonPress(1000)) {
+        if(!waitButtonPress(1000000)) {
 
             // tell user to not touch during first part of calibration
             lcd.fillScreen(Color_Background);
@@ -378,8 +383,8 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             // calculate rotation time offset
             float startRotation = 0.0f;
             imu.getRotation(startRotation);
-            uint32_t endMillis = millis() + rotationDuration;
-            while(millis() < endMillis) {
+            uint32_t endMicros = micros() + rotationDuration;
+            while(micros() < endMicros) {
                 if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             rotationTimeOffset = (startRotation - lastRotation) / rotationDuration;
@@ -392,13 +397,13 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nrotation factor", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
-        if(!waitButtonPress(1000)) {
+        if(!waitButtonPress(1000000)) {
         
             // calculate initial rotation
             while(lastRotation == 0.0f) {
                 imu.getRotation(lastRotation);
             }
-            float startRotation = lastRotation + (rotationTimeOffset * millis());
+            float startRotation = lastRotation + (rotationTimeOffset * micros());
 
             // tell user to turn the vehicle for rotation factor calibration
             lcd.fillScreen(Color_Background);
@@ -407,7 +412,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             while(digitalReadFast(Pin_Button_INT)) {
                 imu.getRotation(lastRotation);
             }
-            lastRotation += rotationTimeOffset * millis();
+            lastRotation += rotationTimeOffset * micros();
             rotationFactor = (rotationRounds * 360.0f) / abs(lastRotation - startRotation);
         }
     }
@@ -419,7 +424,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\ndistance sensors", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
-        if(!waitButtonPress(1000)) {
+        if(!waitButtonPress(1000000)) {
             
             uint16_t data[mainSamples] = {};
             const int32_t expectedSum = distance * preSamples;
@@ -433,7 +438,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
                 lcd.drawChar(28, 4, font5x7, ':', Color_Text, Color_Background, 2);
                 lcd.drawText(40, 4, font5x7, String(distance).c_str(), Color_Text, Color_Background, 2);
                 lcd.drawText(4, 24, font5x7, "press button to start\nhold button to skip", Color_Text, Color_Background);
-                if(!waitButtonPress(1000)) {
+                if(!waitButtonPress(1000000)) {
 
                     // draw bar chart area
                     lcd.fillScreen(Color_Background);
@@ -559,7 +564,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         lcd.fillScreen(Color_Background);
         lcd.drawText(4, 4, font5x7, "calibration:\nservo center", Color_Text, Color_Background);
         lcd.drawText(4, 24, font5x7, "press button to start\nhold button >1s to skip", Color_Text, Color_Background);
-        if(!waitButtonPress(1000)) {
+        if(!waitButtonPress(1000000)) {
 
             // prepare user interface
             lcd.fillScreen(Color_Background);
@@ -569,7 +574,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             uint8_t mode = 0;
             while(true) {
                 lcd.drawText(4, 4, font5x7, ("mode: " + modeNames[mode] + "\nservo center: " + String(servoCenterDuty)).c_str(), Color_Text, Color_Background);
-                if(waitButtonPress(1000)) {
+                if(waitButtonPress(1000000)) {
                     if(mode == 2) setVelocity(0.0f, true);
                     if(mode < 3) mode++;
                     else mode = 0;
@@ -647,10 +652,10 @@ void CAR::setServo(float angle) {
 }
 
 void CAR::showFinish(const char* userData) {
-    uint32_t time = millis() - startTime;
+    uint32_t time = micros() - startTime;
     lcd.fillScreen(Color_Background);
     for(uint8_t i = 0; i < 12; i++) lcd.drawRect(4 + (i * 13), 4, 9, 4, sensorError[i] ? Color_Error : (sensorWarning[i] ? Color_Warning : Color_Running));
-    lcd.drawText(4, 12, font5x7, ("time: " + String(time / 1000.0f) + " s").c_str(), Color_Text, Color_Background, 2);
+    lcd.drawText(4, 12, font5x7, ("time: " + String(time / 1000000.0f) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, ("convs: " + String(getConverterTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 40, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 48, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background);
@@ -722,14 +727,9 @@ void CAR::showSensorData(bool complete) {
 
 void CAR::start() {
 
-    if(rpiActive) {
-        // start object detection
-        Serial7.write((uint8_t*)&uartTest, sizeof(uartTest));
-    }
-
     // set rotation offset
     while(imu.getRotation(lastRotation)) delay(1);
-    lastRotation += millis() * rotationTimeOffset;
+    lastRotation += micros() * rotationTimeOffset;
     lastRotation *= rotationFactor;
     rotationOffset = -lastRotation;
 
@@ -743,18 +743,18 @@ void CAR::start() {
     analogWrite(Pin_Servo_PWM, servoCenterDuty);
 
     // update sensors multiple times
-    uint32_t endMillis = millis() + 200;
-    while(millis() < endMillis) {
+    uint32_t endMicros = micros() + 200;
+    while(micros() < endMicros) {
         for(uint8_t i = 0; i < 8; i++) {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
         }
         if(imu.getRotation(lastRotation) == 0) {
-            lastRotation += millis() * rotationTimeOffset;
+            lastRotation += micros() * rotationTimeOffset;
             lastRotation *= rotationFactor;
             lastRotation += rotationOffset;
         }
     }
-    startTime = millis();
+    startTime = micros();
 }
 
 void CAR::update() {
@@ -822,7 +822,7 @@ void CAR::update() {
 
     // update rotation
     if((imuError = imu.getRotation(lastRotation)) == 0) {
-        lastRotation += millis() * rotationTimeOffset;
+        lastRotation += micros() * rotationTimeOffset;
         lastRotation *= rotationFactor;
         lastRotation += rotationOffset;
     }
@@ -853,12 +853,12 @@ bool CAR::waitButtonPress(uint32_t duration) {
     while(digitalReadFast(Pin_Button_INT)) update();
 
     // wait until button is released
-    uint32_t end = millis() + duration;
+    uint32_t end = micros() + duration;
     if(duration) {
         delay(40);
         while(!digitalReadFast(Pin_Button_INT)) {
             update();
-            if(millis() >= end) break;
+            if(micros() >= end) break;
         }
     }
 
@@ -866,5 +866,5 @@ bool CAR::waitButtonPress(uint32_t duration) {
     digitalWriteFast(Pin_Button_LED, LOW);
 
     // return duration in ms
-    return millis() >= end;
+    return micros() >= end;
 }

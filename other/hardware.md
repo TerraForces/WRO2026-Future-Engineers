@@ -1,4 +1,7 @@
-### Teensy Pinout
+# additional hardware information
+The following information can help understanding the PCB design
+
+## Teensy 4.1 Pinout
 |Pin|Analog|UART|I2C|SPI|WRO|
 |---|---|---|---|---|---|
 |0||RX1||CS1|LCD (CS)|

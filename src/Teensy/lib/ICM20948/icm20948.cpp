@@ -10,53 +10,6 @@ uint8_t dmp_image[] = {
 #include "icm20948_img.hpp"
 };
 
-const uint16_t androidSensorBitmask[44] = {
-    0xFFFF, // 0  Meta Data
-    0x8008, // 1  Accelerometer
-    0x0028, // 2  Magnetic Field
-    0x0408, // 3  Orientation
-    0x4048, // 4  Gyroscope
-    0x1008, // 5  Light
-    0x0088, // 6  Pressure
-    0xFFFF, // 7  Temperature
-    0xFFFF, // 8  Proximity <----------- fixme
-    0x0808, // 9  Gravity
-    0x8808, // 10 Linear Acceleration
-    0x0408, // 11 Rotation Vector
-    0xFFFF, // 12 Humidity
-    0xFFFF, // 13 Ambient Temperature
-    0x2008, // 14 Magnetic Field Uncalibrated
-    0x0808, // 15 Game Rotation Vector
-    0x4008, // 16 Gyroscope Uncalibrated
-    0x0000, // 17 Significant Motion
-    0x0018, // 18 Step Detector
-    0x0010, // 19 Step Counter <----------- fixme
-    0x0108, // 20 Geomagnetic Rotation Vector
-    0xFFFF, // 21 ANDROID_SENSOR_HEART_RATE,
-    0xFFFF, // 22 ANDROID_SENSOR_PROXIMITY,
-    0x8008, // 23 ANDROID_SENSOR_WAKEUP_ACCELEROMETER,
-    0x0028, // 24 ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD,
-    0x0408, // 25 ANDROID_SENSOR_WAKEUP_ORIENTATION,
-    0x4048, // 26 ANDROID_SENSOR_WAKEUP_GYROSCOPE,
-    0x1008, // 27 ANDROID_SENSOR_WAKEUP_LIGHT,
-    0x0088, // 28 ANDROID_SENSOR_WAKEUP_PRESSURE,
-    0x0808, // 29 ANDROID_SENSOR_WAKEUP_GRAVITY,
-    0x8808, // 30 ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,
-    0x0408, // 31 ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,
-    0xFFFF, // 32 ANDROID_SENSOR_WAKEUP_RELATIVE_HUMIDITY,
-    0xFFFF, // 33 ANDROID_SENSOR_WAKEUP_AMBIENT_TEMPERATURE,
-    0x2008, // 34 ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD_UNCALIBRATED,
-    0x0808, // 35 ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR,
-    0x4008, // 36 ANDROID_SENSOR_WAKEUP_GYROSCOPE_UNCALIBRATED,
-    0x0018, // 37 ANDROID_SENSOR_WAKEUP_STEP_DETECTOR,
-    0x0010, // 38 ANDROID_SENSOR_WAKEUP_STEP_COUNTER,
-    0x0108, // 39 ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR
-    0xFFFF, // 40 ANDROID_SENSOR_WAKEUP_HEART_RATE,
-    0x0000, // 41 ANDROID_SENSOR_WAKEUP_TILT_DETECTOR,
-    0x8008, // 42 Raw Acc
-    0x4048, // 43 Raw Gyr
-};
-
 #define ERROR(func, i) return (error << 16) + (func << 8) + i
 
 ICM20948::ICM20948(I2C& i2c, uint8_t address) : _i2c(i2c), _address(address) {}
@@ -66,7 +19,7 @@ uint32_t ICM20948::begin() {
 
     if((error = _icm.begin(&_i2c, _address))) ERROR(func_begin, 0);
     if((error = _icm.initializeDMP())) ERROR(func_begin, 1);
-    if((error = _icm.enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION))) ERROR(func_begin, 2);
+    //if((error = _icm.enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION))) ERROR(func_begin, 2);
 
     // check id
     /*if((error = selectBank(0))) ERROR(func_begin, 0);
@@ -293,90 +246,63 @@ uint32_t ICM20948::begin() {
     if((error = selectBank(0))) ERROR(func_begin, 95);
     if(!read(16, &buf, 1)) ERROR(func_begin, 96);
     buf |= 0x02;
-    if(!write(16, &buf, 1)) ERROR(func_begin, 97);
+    if(!write(16, &buf, 1)) ERROR(func_begin, 97);*/
 
-    // enable DMP sensor (INV_ICM20948_SENSOR_ROTATION_VECTOR = ANDROID_SENSOR_ROTATION_VECTOR)
-    uint32_t enabledSensors0 = 0x00000800u, enabledSensors1 = 0x00000000u;
-    uint16_t delta = 0;
-    uint16_t data_rdy_status = 0;
-    uint16_t inv_event_control = 0;
-    for (int32_t i = 0; i < 32; i++) {
-        uint32_t androidSensorAsBitMask = 1L << i;
-        if((enabledSensors0 & androidSensorAsBitMask) > 0) delta |= androidSensorBitmask[i];
-        if((enabledSensors1 & androidSensorAsBitMask) > 0) delta |= androidSensorBitmask[i + 32];
-        if(((enabledSensors0 & androidSensorAsBitMask & 0xE29E8E0Au) > 0) || ((enabledSensors1 & androidSensorAsBitMask & 0x000006E8u) > 0)) {
-            data_rdy_status |= 0x0002;
-            inv_event_control |= 0x0200;
-        }
-        if(((enabledSensors0 & androidSensorAsBitMask & 0xE6018E18u) > 0) || ((enabledSensors1 & androidSensorAsBitMask & 0x00000818u) > 0)) {
-            data_rdy_status |= 0x0001;
-            inv_event_control |= 0x0100;
-        }
-        if(((enabledSensors0 & androidSensorAsBitMask & 0x8310480Cu) > 0) || ((enabledSensors1 & androidSensorAsBitMask & 0x00000084u) > 0)) {
-            data_rdy_status |= 0x0008;
-            inv_event_control |= 0x0080;
-        }
-    }
-    uint16_t delta2 = 0;
-    if((delta & 0x8000) > 0) delta2 |= 0x4000;
-    if(((delta & 0x0040) > 0) || ((delta & 0x4000) > 0)) delta2 |= 0x2000;
-    if(((delta & 0x0020) > 0) || ((delta & 0x2000) > 0) || ((delta & 0x0400) > 0) || ((delta & 0x0100) > 0)) delta2 |= 0x1000;
-    buf16 = __builtin_bswap16(delta);
-    if((error = writeDMP(0, 64, &buf16, 2))) ERROR(func_begin, 98);
-    buf16 = __builtin_bswap16(delta2);
-    if((error = writeDMP(0, 66, &buf16, 2))) ERROR(func_begin, 99);
-    buf16 = __builtin_bswap16(data_rdy_status);
-    if((error = writeDMP(0, 138, &buf16, 2))) ERROR(func_begin, 100);
-    if((delta & 0x0400) > 0) inv_event_control |= 0x0040;
-    if(((delta & 0x0010) > 0) || ((delta & 0x0001) > 0) || ((delta & 0x0002) > 0) || ((delta & 0x0004) > 0)) inv_event_control |= 0x2000;
-    if((delta & 0x0100) > 0) inv_event_control |= 0x0008;
-    buf16 = __builtin_bswap16(inv_event_control);
-    if((error = writeDMP(0, 78, &buf16, 2))) ERROR(func_begin, 101);*/
     uint8_t buf = 0; uint16_t buf16 = 0;
 
     // disable sleep and low power mode
-    if((error = selectBank(0))) ERROR(func_begin, 99);
-    if(!read(6, &buf, 1)) ERROR(func_begin, 100);
+    if((error = selectBank(0))) ERROR(func_begin, 98);
+    if(!read(6, &buf, 1)) ERROR(func_begin, 99);
     buf &= 0x9F;
-    if(!write(6, &buf, 1)) ERROR(func_begin, 101);
+    if(!write(6, &buf, 1)) ERROR(func_begin, 100);
+
+    // enable DMP sensor (INV_ICM20948_SENSOR_ORIENTATION = ANDROID_SENSOR_ORIENTATION)
+    /*buf16 = 0x0804;
+    if((error = writeDMP(0, 64, &buf16, 2))) ERROR(func_begin, 101);
+    buf16 = 0x0010;
+    if((error = writeDMP(0, 66, &buf16, 2))) ERROR(func_begin, 102);
+    buf16 = 0x0B00;
+    if((error = writeDMP(0, 138, &buf16, 2))) ERROR(func_begin, 103);
+    buf16 = 0xC003;
+    if((error = writeDMP(0, 78, &buf16, 2))) ERROR(func_begin, 104);*/
 
     // set DMP sensor interval and counter
     buf16 = 0;
-    if((error = writeDMP(0, 168, &buf16, 2))) ERROR(func_begin, 102);
-    if((error = writeDMP(0, 136, &buf16, 2))) ERROR(func_begin, 103);
+    if((error = writeDMP(0, 168, &buf16, 2))) ERROR(func_begin, 105);
+    if((error = writeDMP(0, 136, &buf16, 2))) ERROR(func_begin, 106);
  
     // enable FIFO
-    if((error = selectBank(0))) ERROR(func_begin, 104);
-    if(!read(3, &buf, 1)) ERROR(func_begin, 105);
+    if((error = selectBank(0))) ERROR(func_begin, 107);
+    if(!read(3, &buf, 1)) ERROR(func_begin, 108);
     buf |= 0x40;
-    if(!write(3, &buf, 1)) ERROR(func_begin, 106);
+    if(!write(3, &buf, 1)) ERROR(func_begin, 109);
 
     // enable DMP
-    if(!read(3, &buf, 1)) ERROR(func_begin, 107);
+    if(!read(3, &buf, 1)) ERROR(func_begin, 110);
     buf |= 0x80;
-    if(!write(3, &buf, 1)) ERROR(func_begin, 108);
+    if(!write(3, &buf, 1)) ERROR(func_begin, 111);
 
     // reset DMP
-    if(!read(3, &buf, 1)) ERROR(func_begin, 109);
+    if(!read(3, &buf, 1)) ERROR(func_begin, 112);
     buf |= 0x08;
-    if(!write(3, &buf, 1)) ERROR(func_begin, 110);
+    if(!write(3, &buf, 1)) ERROR(func_begin, 113);
 
     // reset fifo
-    if(!read(104, &buf, 1)) ERROR(func_begin, 111);
+    if(!read(104, &buf, 1)) ERROR(func_begin, 114);
     buf |= 0x1F;
-    if(!write(104, &buf, 1)) ERROR(func_begin, 112);
+    if(!write(104, &buf, 1)) ERROR(func_begin, 115);
     buf &= 0xFE;
-    if(!write(104, &buf, 1)) ERROR(func_begin, 113);
+    if(!write(104, &buf, 1)) ERROR(func_begin, 116);
     
     // wait until calibration is completed
     delay(10000);
 
     // reset fifo
-    if(!read(104, &buf, 1)) ERROR(func_begin, 111);
+    if(!read(104, &buf, 1)) ERROR(func_begin, 117);
     buf |= 0x1F;
-    if(!write(104, &buf, 1)) ERROR(func_begin, 112);
+    if(!write(104, &buf, 1)) ERROR(func_begin, 118);
     buf &= 0xFE;
-    if(!write(104, &buf, 1)) ERROR(func_begin, 113);
+    if(!write(104, &buf, 1)) ERROR(func_begin, 119);
     return 0;
 }
 
@@ -406,8 +332,10 @@ uint32_t ICM20948::getRotation(float& rotation) {
         size -= 2;
     }
 
+    // read buffer
     uint8_t fifoBytes[icm_20948_DMP_Maximum_Bytes];
 
+    // macro to read "bytes" bytes from the fifo if the bit "mask" in "h" is set
     #define READ_FIFO(h, mask, bytes) \
     if(h & mask) {                                                               \
         if(size < bytes) {                                                       \
@@ -418,14 +346,14 @@ uint32_t ICM20948::getRotation(float& rotation) {
         size -= bytes;                                                           \
     }
 
-    // read payload
+    // read payload and discard data until reaching Quat9
     READ_FIFO(header, 0x8000,  6); // acceleration
     READ_FIFO(header, 0x4000, 12); // rotation change
     READ_FIFO(header, 0x2000,  6); // compass
     READ_FIFO(header, 0x1000,  8); // ALS
     READ_FIFO(header, 0x0800, 12); // Quat6
 
-    // read Quat9
+    // read Quat9 and calculate the z-axis euler rotation (yaw) from the big endian integer quaternion data
     if((header & DMP_header_bitmap_Quat9) > 0) {
         if(size < 14) {
             if((error = getFifoDataSize(size))) ERROR(func_getRotation, 9);
@@ -433,6 +361,8 @@ uint32_t ICM20948::getRotation(float& rotation) {
         }
         if((error = readFromFifo(fifoBytes, 14))) ERROR(func_getRotation, 11);
         size -= 14;
+
+        // extract signed integers from big endian data
         union {
             uint8_t Bytes[14];
             struct {
@@ -442,22 +372,21 @@ uint32_t ICM20948::getRotation(float& rotation) {
                 int16_t accuracy;
             } data;
         } Quat9;
-
         const int DMP_Quat9_Byte_Ordering[icm_20948_DMP_Quat9_Bytes] = { 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 13, 12 };
         for (int i = 0; i < 14; i++) Quat9.Bytes[DMP_Quat9_Byte_Ordering[i]] = fifoBytes[i];
         
-        // extract signed integer quaternion data and convert to float (divide by 2^30)
-        float q0 = ((float)Quat9.data.q0) / 1073741824.0f;
-        float q1 = ((float)Quat9.data.q1) / 1073741824.0f;
-        float q2 = ((float)Quat9.data.q2) / 1073741824.0f;
+        // convert quaternion to float (divide by 2^30)
+        float q0 = Quat9.data.q0 / 1073741824.0f;
+        float q1 = Quat9.data.q1 / 1073741824.0f;
+        float q2 = Quat9.data.q2 / 1073741824.0f;
 
-        // calculate z-axis rotation
+        // calculate z-axis euler rotation (yaw)
         rotation = atan2(2.0f * ((q1 * q0) - sqrt(1.0f - ((q0 * q0) + (q1 * q1) + (q2 * q2))) * q2), 1.0f - (2.0f * ((q0 * q0) + (q2 * q2)))) * (-180.0f / ((float)PI));
     
         // count revolutions
         if((rotation < -60.0f) && (_lastRotation > 60.0f)) _revolutions++;
         else if((rotation > 60.0f) && (_lastRotation < -60.0f)) _revolutions--;
-        _lastRotation = (float)rotation;
+        _lastRotation = rotation;
 
         // add revolutions to rotation value
         rotation += _revolutions * 360.0f;
@@ -470,7 +399,7 @@ uint32_t ICM20948::getRotation(float& rotation) {
     READ_FIFO(header,  0x0020, 12); // compass calibration
     READ_FIFO(header,  0x0010,  4); // step detector
     READ_FIFO(header2, 0x4000,  2); // acceleration accuracy
-    READ_FIFO(header2, 0x2000,  2); // gyro accuracy
+    READ_FIFO(header2, 0x2000,  2); // gyro accuracyextract signed integer quaternion data and 
     READ_FIFO(header2, 0x1000,  2); // compass accuracy
     READ_FIFO(header2, 0x0400,  2); // pickup
     READ_FIFO(header2, 0x0080,  6); // activity recognition
