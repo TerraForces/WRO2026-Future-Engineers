@@ -13,7 +13,7 @@ This repository contains engineering materials of our self-driven vehicle's mode
 - upload video and add link to [video.md](/video/video.md)
 - add 3D models to [`models`](/models/)
 - rewrite IMU startup
-- (optimize display startup)
+- update [funny](/t-photos/funny.jpg) photo
 
 ## Content
 - [`t-photos`](/t-photos/) contains 2 photos of our team (an [official](/t-photos/official.jpg) one and one [funny](/t-photos/funny.jpg) photo with all our team members)

@@ -108,6 +108,9 @@ private:
     /// @param size number of bytes that should be written
     /// @returns 0 if size bytes were written successfully to DMP memory, an error code otherwise
     uint32_t writeDMP(uint8_t bank, uint8_t reg, void* data, uint32_t size);
+
+    // temporary helper functions
+    uint32_t enableDMPSensor();
 };
 
 #endif

@@ -1548,7 +1548,7 @@ ICM_20948_Status_e ICM_20948::initializeDMP(void)
                          // gpm4
                          // gpm8
                          // gpm16
-  myFSS.g = dps2000;     // (ICM_20948_GYRO_CONFIG_1_FS_SEL_e)
+  myFSS.g = dps1000;     // (ICM_20948_GYRO_CONFIG_1_FS_SEL_e)
                          // dps250
                          // dps500
                          // dps1000
@@ -1657,14 +1657,14 @@ ICM_20948_Status_e ICM_20948::initializeDMP(void)
   //            0=1125Hz sample rate, 1=562.5Hz sample rate, ... 4=225Hz sample rate, ...
   //            10=102.2727Hz sample rate, ... etc.
   // @param[in] gyro_level 0=250 dps, 1=500 dps, 2=1000 dps, 3=2000 dps
-  result = setGyroSF(19, 3); if (result > worstResult) worstResult = result; // 19 = 55Hz (see above), 3 = 2000dps (see above)
+  result = setGyroSF(19, 2); if (result > worstResult) worstResult = result; // 19 = 55Hz (see above), 3 = 2000dps (see above)
 
   // Configure the Gyro full scale
   // 2000dps : 2^28
   // 1000dps : 2^27
   //  500dps : 2^26
   //  250dps : 2^25
-  const unsigned char gyroFullScale[4] = {0x10, 0x00, 0x00, 0x00}; // 2000dps : 2^28
+  const unsigned char gyroFullScale[4] = {0x08, 0x00, 0x00, 0x00}; // 2000dps : 2^28
   result = writeDMPmems(GYRO_FULLSCALE, 4, &gyroFullScale[0]); if (result > worstResult) worstResult = result;
 
   // Configure the Accel Only Gain: 15252014 (225Hz) 30504029 (112Hz) 61117001 (56Hz)

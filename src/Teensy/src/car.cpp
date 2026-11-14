@@ -73,13 +73,14 @@ constexpr uint8_t  Config_DS18B20_Conv_Addr[8]   = { 0x28, 0x61, 0x64, 0x0a, 0x5
 constexpr uint8_t  Config_DS18B20_MOSFET_Addr[8] = { 0x28, 0x61, 0x64, 0x0a, 0x4a, 0x1c, 0xf7, 0xf2 }; // hardware address of the DS18B20 next to the drive MOSFET, needs to be changed when replaced by another sensor
 constexpr float    Config_Drive_PWM_Freq         = 2959.955f; // frequency of the drive MOSFET PWM signal
 constexpr uint32_t Config_Drive_PWM_Update_Int   = 10000;     // interval at which the drive PWM duty cycle is being updated (in us)
+constexpr uint32_t Config_LogData_Update_Int     = 20000;     // interval at which the log data is being updated (in us)
 constexpr uint32_t Config_RPI5_Startup_Micros    = 0;         // max startup time for the Raspberry Pi 5 before a power reboot is being forced (or 0 to disable)
 constexpr float    Config_Servo_Angle_To_Duty    = -220.0f;   // servo angle to PWM duty value conversion factor, depends on gear ratio
 constexpr float    Config_Servo_Max_Angle        = 50.0f;     // max angle (to both directions from the center position) that is allowed for the servo to travel to
 
 // configuration values stored on the sd card
 int8_t vl53l1xViewportShift[8] = {}; // shifts the viewport center of every VL53L1X sensor vertically
-float rotationTimeOffset = 0.0f;     // value to counteract the steady rotation drift of classic IMUs (in °/us)
+double rotationTimeOffset = 0.0f;    // value to counteract the steady rotation drift of classic IMUs (in °/us)
 float rotationFactor = 1.0f;         // rotation factor (should always be 1)
 uint16_t servoCenterDuty = 33033;    // PWM duty where the servo lets the vehicle drive perfectly straight
 
@@ -95,6 +96,7 @@ VL53L1X vl53l1x[8] = { &i2c1, &i2c1, &i2c1, &i2c0, &i2c0, &i2c0, &i2c0, &i2c1 };
 // structure containing all data that should be logged periodically
 struct LOGDATA {
     uint32_t timestamp;   // in us
+    uint32_t updates;
     float batteryVoltage; // in V
     float convCurrent;    // in A
     float driveCurrent;   // in A
@@ -113,6 +115,7 @@ int32_t deceleration = -1;
 
 // 
 uint32_t nextDriveUpdateTime = 0;
+uint32_t nextLogDataUpdateTime = 0;
 CAR::COLOR16 lastColor = {};
 uint16_t lastDistance[8] = {};
 std::vector<CAR::OBJECT> lastObjects, currentObjects;
@@ -248,14 +251,15 @@ void CAR::init(bool rpi5) {
     lcd.fillScreen(Color_Background);
 
     // start SD and read configuration data
-    SD.begin(BUILTIN_SDCARD);
-    File configFile = SD.open("/config.txt", FILE_READ);
-    if(configFile) {
-        for(uint8_t i = 0; i < 8; i++) vl53l1xViewportShift[i] = configFile.readStringUntil('\n').toInt();
-        rotationTimeOffset = configFile.readStringUntil('\n').toFloat();
-        rotationFactor = configFile.readStringUntil('\n').toFloat();
-        servoCenterDuty = configFile.readStringUntil('\n').toInt();
-        configFile.close();
+    if(SD.begin(BUILTIN_SDCARD)) {
+        File configFile = SD.open("/config.txt", FILE_READ);
+        if(configFile) {
+            for(uint8_t i = 0; i < 8; i++) vl53l1xViewportShift[i] = configFile.readStringUntil('\n').toInt();
+            rotationTimeOffset = configFile.readStringUntil('\n').toFloat();
+            rotationFactor = configFile.readStringUntil('\n').toFloat();
+            servoCenterDuty = configFile.readStringUntil('\n').toInt();
+            configFile.close();
+        }
     }
 
     // start I2C systems in fast mode
@@ -382,12 +386,12 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
 
             // calculate rotation time offset
             float startRotation = 0.0f;
-            imu.getRotation(startRotation);
+            while(imu.getRotation(startRotation)) delay(1);
             uint32_t endMicros = micros() + rotationDuration;
             while(micros() < endMicros) {
-                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
+                imu.getRotation(lastRotation);
             }
-            rotationTimeOffset = (startRotation - lastRotation) / rotationDuration;
+            rotationTimeOffset = (startRotation - lastRotation) / (double)rotationDuration;
         }
     }
 
@@ -400,9 +404,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         if(!waitButtonPress(1000000)) {
         
             // calculate initial rotation
-            while(lastRotation == 0.0f) {
-                imu.getRotation(lastRotation);
-            }
+            while(imu.getRotation(lastRotation)) delay(1);
             float startRotation = lastRotation + (rotationTimeOffset * micros());
 
             // tell user to turn the vehicle for rotation factor calibration
@@ -598,7 +600,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
     SD.remove("/config.txt");
     File file = SD.open("/config.txt", FILE_WRITE_BEGIN);
     for(uint8_t i = 0; i < 8; i++) file.println(vl53l1xViewportShift[i]);
-    file.println(rotationTimeOffset, 8);
+    file.println(rotationTimeOffset, 15);
     file.println(rotationFactor, 8);
     file.println(servoCenterDuty);
     file.close();
@@ -663,10 +665,12 @@ void CAR::showFinish(const char* userData) {
     lcd.drawRect(0, 126, 160, 2, Color_Warning);
 
     // write recorded log data to SD card
-    File logFile = SD.open("/log.csv", FILE_WRITE);
-    logFile.println("timestamp,battery_voltage,conv_current,drive_current\n");
+    uint32_t i = 0;
+    while(SD.exists(("/log_" + String(i) + ".csv").c_str())) i++;
+    File logFile = SD.open(("/log_" + String(i) + ".csv").c_str(), FILE_WRITE);
+    logFile.println("timestamp,updates,battery_voltage,conv_current,drive_current\n");
     for(LOGDATA* data = logData; data <= currentLogData; data++) logFile.printf(
-        "%u,%.4f,%.4f,%.4f\n", data->timestamp, data->batteryVoltage, data->convCurrent, data->driveCurrent
+        "%u,%u,%.4f,%.4f,%.4f\n", data->timestamp, data->updates, data->batteryVoltage, data->convCurrent, data->driveCurrent
     );
     logFile.close();
 
@@ -743,7 +747,7 @@ void CAR::start() {
     analogWrite(Pin_Servo_PWM, servoCenterDuty);
 
     // update sensors multiple times
-    uint32_t endMicros = micros() + 200;
+    uint32_t endMicros = micros() + 200000;
     while(micros() < endMicros) {
         for(uint8_t i = 0; i < 8; i++) {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
@@ -795,6 +799,17 @@ void CAR::update() {
         }
     }
 
+    // read ADC data
+    if(time > nextLogDataUpdateTime) {
+        nextLogDataUpdateTime = time + Config_LogData_Update_Int;
+        if(currentLogData < lastLogData) currentLogData++;
+        currentLogData->timestamp = micros();
+        currentLogData->batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
+        currentLogData->convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
+        currentLogData->driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
+    }
+    currentLogData->updates++;
+
     // update event handlers
     yield();
 
@@ -826,13 +841,6 @@ void CAR::update() {
         lastRotation *= rotationFactor;
         lastRotation += rotationOffset;
     }
-
-    // read ADC data
-    if(currentLogData < lastLogData) currentLogData++;
-    currentLogData->timestamp = micros();
-    currentLogData->batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
-    currentLogData->convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
-    currentLogData->driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
 
     // toggle onboard LED (helps debugging whether the program is executing this update function)
     digitalToggleFast(13);

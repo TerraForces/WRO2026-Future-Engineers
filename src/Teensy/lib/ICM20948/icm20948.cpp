@@ -10,7 +10,7 @@ uint8_t dmp_image[] = {
 #include "icm20948_img.hpp"
 };
 
-#define ERROR(func, i) return (error << 16) + (func << 8) + i
+#define ERROR(func, i) return (error << 16) | (func << 8) | i
 
 ICM20948::ICM20948(I2C& i2c, uint8_t address) : _i2c(i2c), _address(address) {}
 
@@ -19,7 +19,7 @@ uint32_t ICM20948::begin() {
 
     if((error = _icm.begin(&_i2c, _address))) ERROR(func_begin, 0);
     if((error = _icm.initializeDMP())) ERROR(func_begin, 1);
-    //if((error = _icm.enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION))) ERROR(func_begin, 2);
+    if((error = _icm.enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION))) ERROR(func_begin, 2);
 
     // check id
     /*if((error = selectBank(0))) ERROR(func_begin, 0);
@@ -293,7 +293,7 @@ uint32_t ICM20948::begin() {
     if(!write(104, &buf, 1)) ERROR(func_begin, 115);
     buf &= 0xFE;
     if(!write(104, &buf, 1)) ERROR(func_begin, 116);
-    
+
     // wait until calibration is completed
     delay(10000);
 
@@ -303,6 +303,7 @@ uint32_t ICM20948::begin() {
     if(!write(104, &buf, 1)) ERROR(func_begin, 118);
     buf &= 0xFE;
     if(!write(104, &buf, 1)) ERROR(func_begin, 119);
+
     return 0;
 }
 
@@ -354,6 +355,7 @@ uint32_t ICM20948::getRotation(float& rotation) {
     READ_FIFO(header, 0x0800, 12); // Quat6
 
     // read Quat9 and calculate the z-axis euler rotation (yaw) from the big endian integer quaternion data
+    bool validRotation = false;
     if((header & DMP_header_bitmap_Quat9) > 0) {
         if(size < 14) {
             if((error = getFifoDataSize(size))) ERROR(func_getRotation, 9);
@@ -381,15 +383,20 @@ uint32_t ICM20948::getRotation(float& rotation) {
         float q2 = Quat9.data.q2 / 1073741824.0f;
 
         // calculate z-axis euler rotation (yaw)
-        rotation = atan2(2.0f * ((q1 * q0) - sqrt(1.0f - ((q0 * q0) + (q1 * q1) + (q2 * q2))) * q2), 1.0f - (2.0f * ((q0 * q0) + (q2 * q2)))) * (-180.0f / ((float)PI));
+        float temp = atan2(2.0f * ((q1 * q0) - sqrt(1.0f - ((q0 * q0) + (q1 * q1) + (q2 * q2))) * q2), 1.0f - (2.0f * ((q0 * q0) + (q2 * q2)))) * (-180.0f / ((float)PI));
     
-        // count revolutions
-        if((rotation < -60.0f) && (_lastRotation > 60.0f)) _revolutions++;
-        else if((rotation > 60.0f) && (_lastRotation < -60.0f)) _revolutions--;
-        _lastRotation = rotation;
+        // only update rotation if temp is a valid value (not nan)
+        if(!isnan(temp)) {
 
-        // add revolutions to rotation value
-        rotation += _revolutions * 360.0f;
+            // count revolutions
+            if((temp < -60.0f) && (_lastRotation > 60.0f)) _revolutions++;
+            else if((temp > 60.0f) && (_lastRotation < -60.0f)) _revolutions--;
+            _lastRotation = temp;
+
+            // add revolutions to rotation value
+            rotation = temp + (_revolutions * 360.0f);
+            validRotation = true;
+        }
     }
 
     // read remaining payload
@@ -399,7 +406,7 @@ uint32_t ICM20948::getRotation(float& rotation) {
     READ_FIFO(header,  0x0020, 12); // compass calibration
     READ_FIFO(header,  0x0010,  4); // step detector
     READ_FIFO(header2, 0x4000,  2); // acceleration accuracy
-    READ_FIFO(header2, 0x2000,  2); // gyro accuracyextract signed integer quaternion data and 
+    READ_FIFO(header2, 0x2000,  2); // gyro accuracy
     READ_FIFO(header2, 0x1000,  2); // compass accuracy
     READ_FIFO(header2, 0x0400,  2); // pickup
     READ_FIFO(header2, 0x0080,  6); // activity recognition
@@ -407,8 +414,9 @@ uint32_t ICM20948::getRotation(float& rotation) {
 
     // read footer
     READ_FIFO(1, 1, 2);
-    
-    return 0;
+
+    if(size) ERROR(func_getRotation, 12);
+    return validRotation ? 0 : ((func_getRotation << 8) | 13);
 }
 
 uint32_t ICM20948::getFifoDataSize(uint16_t& size) {
@@ -532,5 +540,178 @@ uint32_t ICM20948::writeDMP(uint8_t bank, uint8_t reg, void* data, uint32_t size
             if(!write(126, &bank, 1)) ERROR(func_writeDMP, 5);
         }
     }
+    return 0;
+}
+
+/**
+ * temporary
+ */
+uint32_t ICM20948::enableDMPSensor() {
+    /*ICM_20948_Status_e result = ICM_20948_Stat_Ok;
+
+    uint16_t inv_event_control = 0; // Use this to store the value for MOTION_EVENT_CTL
+    uint16_t data_rdy_status = 0;   // Use this to store the value for DATA_RDY_STATUS
+
+    uint8_t androidSensor = sensor_type_2_android_sensor(INV_ICM20948_SENSOR_ORIENTATION); // Convert sensor from enum inv_icm20948_sensor to Android numbering
+
+    if (androidSensor >= ANDROID_SENSOR_NUM_MAX)
+        return ICM_20948_Stat_SensorNotSupported; // Bail if the sensor is not supported (TO DO: Support B2S etc)
+
+    // Convert the Android sensor into a bit mask for DATA_OUT_CTL1
+    uint16_t delta = inv_androidSensor_to_control_bits[androidSensor];
+    if (delta == 0xFFFF)
+        return ICM_20948_Stat_SensorNotSupported; // Bail if the sensor is not supported
+
+    // Convert the Android sensor number into a bitmask and set or clear that bit in _enabled_Android_0 / _enabled_Android_1
+    unsigned long androidSensorAsBitMask;
+    if (androidSensor < 32) // Sensors 0-31
+    {
+        androidSensorAsBitMask = 1L << androidSensor;
+        if (state == 0) // Should we disable the sensor?
+        {
+        pdev->_enabled_Android_0 &= ~androidSensorAsBitMask; // Clear the bit to disable the sensor
+        }
+        else
+        {
+        pdev->_enabled_Android_0 |= androidSensorAsBitMask; // Set the bit to enable the sensor
+        }
+    }
+    else // Sensors 32-
+    {
+        androidSensorAsBitMask = 1L << (androidSensor - 32);
+        if (state == 0) // Should we disable the sensor?
+        {
+        pdev->_enabled_Android_1 &= ~androidSensorAsBitMask; // Clear the bit to disable the sensor
+        }
+        else
+        {
+        pdev->_enabled_Android_1 |= androidSensorAsBitMask; // Set the bit to enable the sensor
+        }
+    }
+
+    // Now we know androidSensor is valid, reconstruct the value for DATA_OUT_CTL1 from _enabled_Android_0 and _enabled_Android_0
+    delta = 0; // Clear delta
+    for (int i = 0; i < 32; i++)
+    {
+        androidSensorAsBitMask = 1L << i;
+        if ((pdev->_enabled_Android_0 & androidSensorAsBitMask) > 0) // Check if the Android sensor (0-31) is enabled
+        {
+        delta |= inv_androidSensor_to_control_bits[i]; // If it is, or the required bits into delta
+        }
+        if ((pdev->_enabled_Android_1 & androidSensorAsBitMask) > 0) // Check if the Android sensor (32-) is enabled
+        {
+        delta |= inv_androidSensor_to_control_bits[i + 32]; // If it is, or the required bits into delta
+        }
+        // Also check which bits need to be set in the Data Ready Status and Motion Event Control registers
+        // Compare to INV_NEEDS_ACCEL_MASK, INV_NEEDS_GYRO_MASK and INV_NEEDS_COMPASS_MASK
+        // See issue #150 - thank you @dobodu
+        if (((pdev->_enabled_Android_0 & androidSensorAsBitMask & INV_NEEDS_ACCEL_MASK) > 0)
+        || ((pdev->_enabled_Android_1 & androidSensorAsBitMask & INV_NEEDS_ACCEL_MASK1) > 0))
+        {
+        data_rdy_status |= DMP_Data_ready_Accel;
+        inv_event_control |= DMP_Motion_Event_Control_Accel_Calibr;
+        }
+        if (((pdev->_enabled_Android_0 & androidSensorAsBitMask & INV_NEEDS_GYRO_MASK) > 0)
+        || ((pdev->_enabled_Android_1 & androidSensorAsBitMask & INV_NEEDS_GYRO_MASK1) > 0))
+        {
+        data_rdy_status |= DMP_Data_ready_Gyro;
+        inv_event_control |= DMP_Motion_Event_Control_Gyro_Calibr;
+        }
+        if (((pdev->_enabled_Android_0 & androidSensorAsBitMask & INV_NEEDS_COMPASS_MASK) > 0)
+        || ((pdev->_enabled_Android_1 & androidSensorAsBitMask & INV_NEEDS_COMPASS_MASK1) > 0))
+        {
+        data_rdy_status |= DMP_Data_ready_Secondary_Compass;
+        inv_event_control |= DMP_Motion_Event_Control_Compass_Calibr;
+        }
+    }
+
+    result = ICM_20948_sleep(pdev, false); // Make sure chip is awake
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    result = ICM_20948_low_power(pdev, false); // Make sure chip is not in low power state
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    // Check if Accel, Gyro/Gyro_Calibr or Compass_Calibr/Quat9/GeoMag/Compass are to be enabled. If they are then we need to request the accuracy data via header2.
+    uint16_t delta2 = 0;
+    if ((delta & DMP_Data_Output_Control_1_Accel) > 0)
+    {
+        delta2 |= DMP_Data_Output_Control_2_Accel_Accuracy;
+    }
+    if (((delta & DMP_Data_Output_Control_1_Gyro_Calibr) > 0) || ((delta & DMP_Data_Output_Control_1_Gyro) > 0))
+    {
+        delta2 |= DMP_Data_Output_Control_2_Gyro_Accuracy;
+    }
+    if (((delta & DMP_Data_Output_Control_1_Compass_Calibr) > 0) || ((delta & DMP_Data_Output_Control_1_Compass) > 0) || ((delta & DMP_Data_Output_Control_1_Quat9) > 0) || ((delta & DMP_Data_Output_Control_1_Geomag) > 0))
+    {
+        delta2 |= DMP_Data_Output_Control_2_Compass_Accuracy;
+    }
+    // TO DO: Add DMP_Data_Output_Control_2_Pickup etc. if required
+
+    // Write the sensor control bits into memory address DATA_OUT_CTL1
+    unsigned char data_output_control_reg[2];
+    data_output_control_reg[0] = (unsigned char)(delta >> 8);
+    data_output_control_reg[1] = (unsigned char)(delta & 0xff);
+    pdev->_dataOutCtl1 = delta; // Diagnostics
+    result = inv_icm20948_write_mems(pdev, DATA_OUT_CTL1, 2, (const unsigned char *)&data_output_control_reg);
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    // Write the 'header2' sensor control bits into memory address DATA_OUT_CTL2
+    data_output_control_reg[0] = (unsigned char)(delta2 >> 8);
+    data_output_control_reg[1] = (unsigned char)(delta2 & 0xff);
+    pdev->_dataOutCtl2 = delta2; // Diagnostics
+    result = inv_icm20948_write_mems(pdev, DATA_OUT_CTL2, 2, (const unsigned char *)&data_output_control_reg);
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    // Set the DATA_RDY_STATUS register
+    data_output_control_reg[0] = (unsigned char)(data_rdy_status >> 8);
+    data_output_control_reg[1] = (unsigned char)(data_rdy_status & 0xff);
+    pdev->_dataRdyStatus = data_rdy_status; // Diagnostics
+    result = inv_icm20948_write_mems(pdev, DATA_RDY_STATUS, 2, (const unsigned char *)&data_output_control_reg);
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    // Check which extra bits need to be set in the Motion Event Control register
+    if ((delta & DMP_Data_Output_Control_1_Quat9) > 0)
+    {
+        inv_event_control |= DMP_Motion_Event_Control_9axis;
+    }
+    if (((delta & DMP_Data_Output_Control_1_Step_Detector) > 0) || ((delta & DMP_Data_Output_Control_1_Step_Ind_0) > 0) || ((delta & DMP_Data_Output_Control_1_Step_Ind_1) > 0) || ((delta & DMP_Data_Output_Control_1_Step_Ind_2) > 0))
+    {
+        inv_event_control |= DMP_Motion_Event_Control_Pedometer_Interrupt;
+    }
+    if ((delta & DMP_Data_Output_Control_1_Geomag) > 0)
+    {
+        inv_event_control |= DMP_Motion_Event_Control_Geomag;
+    }
+
+    // Set the MOTION_EVENT_CTL register
+    data_output_control_reg[0] = (unsigned char)(inv_event_control >> 8);
+    data_output_control_reg[1] = (unsigned char)(inv_event_control & 0xff);
+    pdev->_motionEventCtl = inv_event_control; // Diagnostics
+    result = inv_icm20948_write_mems(pdev, MOTION_EVENT_CTL, 2, (const unsigned char *)&data_output_control_reg);
+    if (result != ICM_20948_Stat_Ok)
+    {
+        return result;
+    }
+
+    result = ICM_20948_low_power(pdev, true); // Put chip into low power state
+    if (result != ICM_20948_Stat_Ok)
+        return result;
+
+    return result;*/
     return 0;
 }
