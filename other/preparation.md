@@ -1,6 +1,7 @@
-# vehicle preparation
-## software preparation
-### required external parts
+# Vehicle preparation
+## Hardware assembly
+## Software preparation
+### Required external parts
 - laptop or desktop computer with Windows, macOS or a Linux distro of choice (macOS has not been tested but should be supported) and an internet connection
 - cable with a USB 2 micro-B plug to connect to the Teensy 4.1
 - USB keyboard and mouse (a USB hub with a slim connector is recommended for connecting to the Raspberry Pi 5 while it is installed in the vehicle)
@@ -8,8 +9,8 @@
 - a WiFi network connected to the internet (or an Ethernet cable with the shielding of one plug removed, so it can't hit the fuse mount)
 
 for the ATtiny841 (optional):
-- AVR programmer
-- adapter board / cable
+- AVR ISP programmer
+- AVR 6-pin ISP 2.54 mm to 1.27 mm adapter
 
 ### Teensy 4.1
 1. download and install [Visual Studio Code (VSCode)](https://code.visualstudio.com/download)
@@ -17,25 +18,25 @@ for the ATtiny841 (optional):
 3. download and open the [/src/Teensy](/src/Teensy/) directory of this repository in VSCode, the PlatformIO extension should automatically download the necessary framework and library files (might need a few minutes too)
 4. select the program by (un-)commenting the program selection lines (7/8) at the start of the [main.cpp](https://github.com/TerraForces/WRO2026-Future-Engineers/blob/master/src/Teensy/src/main.cpp) file:
     - for the calibration program / sensor tests:
-    ```
-    #define TEST
-    //#define OBJECTS
-    ```
+        ```
+        #define TEST
+        //#define OBJECTS
+        ```
     - for camera / object detection tests:
-    ```
-    //#define TEST
-    #define OBJECTS
-    ```
+        ```
+        //#define TEST
+        #define OBJECTS
+        ```
     - for the Open Challenge:
-    ```
-    //#define TEST
-    //#define OBJECTS
-    ```
+        ```
+        //#define TEST
+        //#define OBJECTS
+        ```
     - for the Obstacle Challenge:
-    ```
-    //#define TEST
-    #define OBJECTS
-    ```
+        ```
+        //#define TEST
+        #define OBJECTS
+        ```
 5. make sure that the vehicle is switched off, then put the [upload switch](/v-photos/top.png) into the "PGM" position and connect the Teensy 4.1 to the computer using the USB cable
 6. press the upload button in the [PlatformIO Toolbar](https://docs.platformio.org/en/latest/integration/ide/vscode.html#ide-vscode-toolbar)
 7. on some operating systems additional steps might be needed (like installing configuration files for port access in Linux), please follow the instructions provided in the terminal output
@@ -88,3 +89,12 @@ for the ATtiny841 (optional):
 17. when everything is working correctly, the lcd screen of the vehicle should now show that it's ready and display objects as they are visible to the camera
 
 ### ATtiny841 (optional)
+1. completely disconnect the [battery check PCB](/schemes/batteryCheck.png) from the vehicle (while it's powered off)
+2. remove the protection cap from the 1.27 mm ISP connector
+3. connect the MCU to your computer (using the 1.27 to 2.54 mm adapter and the ISP programmer, the ground pin should face away from the battery level display)
+4. upload the program to the ATtiny841, for example using Microchip Studio on Windows
+5. disconnect the adapter and put the protection cap back on the 1.27 mm ISP connector
+6. (re-)connect the [battery check PCB](/schemes/batteryCheck.png) to the vehicle (while it's powered off)
+
+> [!NOTE]
+> Our original intention was to use the ATtiny841 to automatically power off the entire vehicle when the battery voltage is critically low. This functionality is implemented in the code but for it to work, the shutdown pin on the [battery check PCB](/schemes/batteryCheck.png) has to be connected to the "EN 3V3" pin on the [main PCB](/schemes/main.png). We decided to not do that because we don't want to risk experiencing a shutdown during a race. That's why the ATtiny841 does currently not add any functionality and is therefore completely optional.
