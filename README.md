@@ -1,9 +1,10 @@
 # WRO2026 Future Engineers - Team TerraForce
 
-This repository contains engineering materials of our self-driven vehicle's model participating in the WRO Future Engineers competition in the season 2026.
+This repository contains engineering materials of our self-driven vehicle's model participating in the WRO Future Engineers competition in the season 2026:<br><br>
+![vehicle showcase](/other/images/title.png)
 
 ## TODO
-- add changelog
+- add changelog past
 - add [hardware assembly](/other/preparation.md#hardware-assembly) instructions
 - comment the [I2C library](/src/Teensy/lib/I2C/)
 - comment the [NeoPixel update code](/src/Teensy/lib/NeoPixel/neopixel.cpp)
@@ -36,7 +37,13 @@ The development of the <b>main driving software</b> has been continued from the 
 The [Teensy 4.1](https://www.pjrc.com/store/teensy41.html) features only one powerful core which the driving logic and drivers have to share (in contrast to the two seperated cores in the last season), but the high clock frequency of 600 MHz (by default) allows us to run everything even faster than last season while also eliminating any possible issues with shared memory access and the RTOS overhead.<br>
 The only downsides we found were that the processor now does nothing useful while waiting for requested data over I2C and that the [```update()```](/src/Teensy/src/car.hpp#159) function has to be called every time the measurement results should be updated, but also while waiting to keep the acceleration control and power monitoring running, prevent the UART buffer and IMU FIFO from overflowing and let the VL53L1X sensors start new measurements.
 
-The <b>driving logic</b> of both challenges follows the same strategy as last season: following a simple path, parallel/perpendicular to the track walls to keep the laser beam of the VL53L1X ToF distance sensors perpendicular to the barriers which maximizes measurement accuracy. In the obstacle challenge, we follow one of two tracks (either next to the inner or the outer wall - black in the following diagram). The additional, angled VL53L1X sensors enable us to also drive in an angle of around 45° to the walls which we use while changing the driving side in the obstacle challenge (arrows in the following diagram - colored by next traffic sign):<br><br>
+The <b>driving logic</b> of both challenges follows the same strategy as last season: following a simple path, parallel/perpendicular to the track walls to keep the laser beam of the VL53L1X ToF distance sensors perpendicular to the barriers which maximizes measurement accuracy. In the obstacle challenge, we follow one of two tracks (either next to the inner or the outer wall - black in the following diagrams). The additional, angled VL53L1X sensors enable us to also drive in an angle of around 45° to the walls which we use while changing the driving side in the obstacle challenge (arrows in the following diagrams - color as the next traffic sign):<br><br>
+round 1 clockwise:
+![round 1 cw](/other/diagrams/obstaclePaths1cw.png)
+round 1 counterclockwise:
+![round 1 ccw](/other/diagrams/obstaclePaths1ccw.png)
+
+After recoding the traffic sign positions and colors in the first round (pink circles = evaluated photo locations), the following rounds follow a more optimized path without looking for traffic signs again:
 ![paths in rounds 2 and 3](/other/diagrams/obstaclePaths.png)
 
 We also tested a reaction based approach for the obstacle challenge which attempts to keep the next traffic sign centered in the camera view and drives around it when the object gets within a defined distance. While the code for this strategy was really short and simple to understand compared to the one of our fully planned route, it couldn't be modified as easily as our code where most cases are being handled seperately. The reaction based approach kept missing a few traffic signs every round and, in contrast to the planned path, the positions of traffic signs can't be saved and finding the parking position is harder because the current position is mostly unknown. We quickly decided to stay with the planned path strategy.

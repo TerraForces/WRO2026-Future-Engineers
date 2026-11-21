@@ -1,4 +1,11 @@
 # Changelog (latest first)
+## commit #29
+- added title image
+- changed all time measurements in [car.cpp](/src/Teensy/src/car.cpp) from milliseconds to microseconds
+- increased rotation calibration time from 30 to 60 seconds
+- reduced rotation calibration revolutions from 16 to 8
+- removed empty line in log files in [car.cpp](/src/Teensy/src/car.cpp)
+
 ## commit #28 "partial hardware assembly, path diagrams"
 - added partial [hardware assembly instructions](/other/preparation.md#hardware-assembly)
 - added many [hardware images](/other/images/)
