@@ -368,9 +368,9 @@ uint32_t ICM20948::getRotation(float& rotation) {
         union {
             uint8_t Bytes[14];
             struct {
-                int32_t q0;
                 int32_t q1;
                 int32_t q2;
+                int32_t q3;
                 int16_t accuracy;
             } data;
         } Quat9;
@@ -378,25 +378,22 @@ uint32_t ICM20948::getRotation(float& rotation) {
         for (int i = 0; i < 14; i++) Quat9.Bytes[DMP_Quat9_Byte_Ordering[i]] = fifoBytes[i];
         
         // convert quaternion to float (divide by 2^30)
-        float q0 = Quat9.data.q0 / 1073741824.0f;
         float q1 = Quat9.data.q1 / 1073741824.0f;
         float q2 = Quat9.data.q2 / 1073741824.0f;
+        float q3 = Quat9.data.q3 / 1073741824.0f;
 
         // calculate z-axis euler rotation (yaw)
-        float temp = atan2(2.0f * ((q1 * q0) - sqrt(1.0f - ((q0 * q0) + (q1 * q1) + (q2 * q2))) * q2), 1.0f - (2.0f * ((q0 * q0) + (q2 * q2)))) * (-180.0f / ((float)PI));
+        float q0sqr = 1.0f - ((q1 * q1) + (q2 * q2) + (q3 * q3));
+        float temp = atan2(2.0f * ((q2 * q1) - ((q0sqr < 0) ? 0 : (sqrt(q0sqr) * q3))), 1.0f - (2.0f * ((q1 * q1) + (q3 * q3)))) * (-180.0f / ((float)PI));
     
-        // only update rotation if temp is a valid value (not nan)
-        if(!isnan(temp)) {
+        // count revolutions
+        if((temp < -60.0f) && (_lastRotation > 60.0f)) _revolutions++;
+        else if((temp > 60.0f) && (_lastRotation < -60.0f)) _revolutions--;
+        _lastRotation = temp;
 
-            // count revolutions
-            if((temp < -60.0f) && (_lastRotation > 60.0f)) _revolutions++;
-            else if((temp > 60.0f) && (_lastRotation < -60.0f)) _revolutions--;
-            _lastRotation = temp;
-
-            // add revolutions to rotation value
-            rotation = temp + (_revolutions * 360.0f);
-            validRotation = true;
-        }
+        // add revolutions to rotation value
+        rotation = temp + (_revolutions * 360.0f);
+        validRotation = true;
     }
 
     // read remaining payload

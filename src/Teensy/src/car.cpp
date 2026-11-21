@@ -669,7 +669,7 @@ void CAR::showFinish(const char* userData) {
     while(SD.exists(("/log_" + String(i) + ".csv").c_str())) i++;
     File logFile = SD.open(("/log_" + String(i) + ".csv").c_str(), FILE_WRITE);
     logFile.println("timestamp,updates,battery_voltage,conv_current,drive_current\n");
-    for(LOGDATA* data = logData; data <= currentLogData; data++) logFile.printf(
+    for(LOGDATA* data = logData + 1; data <= currentLogData; data++) logFile.printf(
         "%u,%u,%.4f,%.4f,%.4f\n", data->timestamp, data->updates, data->batteryVoltage, data->convCurrent, data->driveCurrent
     );
     logFile.close();

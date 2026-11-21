@@ -1,7 +1,99 @@
-# Vehicle preparation
-## Hardware assembly
-## Software preparation
-### Required external parts
+# Hardware assembly
+## complete part list
+quantity|part name|image
+-|-|-
+1|[battery compartment printed from PLA](/models/battery_compartment.stl)|<img height="100" src="images/battery_compartment.png">
+1|[camera mount printed from PLA](/models/camera_mount.stl)|<img height="100" src="images/camera_mount.png">
+1|[camera mount base printed from PLA](/models/camera_mount_base.stl)|<img height="100" src="images/camera_mount_base.png">
+1|[chassis printed from PLA](/models/chassis.stl)|<img height="100" src="images/chassis.png">
+1|[differential gear cap printed from PLA](/models/differential_gear_cap.stl)|<img height="100" src="images/differential_gear_cap.png">
+1|[differential gear cross printed from PLA](/models/differential_gear_cross.stl)|<img height="100" src="images/differential_gear_cross.png">
+1|[differential gear enclosure printed from PLA](/models/differential_gear_enclosure.stl)|<img height="100" src="images/differential_gear_enclosure.png">
+1|[drilling template printed from PLA](/models/drilling_template.stl)|<img height="100" src="images/drilling_template.png">
+1|[drive shaft block left printed from PLA](/models/drive_shaft_block_left.stl)|<img height="100" src="images/drive_shaft_block_left.png">
+1|[drive shaft block right printed from PLA](/models/drive_shaft_block_right.stl)|<img height="100" src="images/drive_shaft_block_right.png">
+1|[motor mount printed from PLA](/models/motor_mount.stl)|<img height="100" src="images/motor_mount.png">
+1|[servo gear printed from PLA](/models/servo_gear.stl)|<img height="100" src="images/servo_gear.png">
+2|[servo spacer printed from PLA](/models/servo_spacer.stl)|<img height="100" src="images/servo_spacer.png">
+2|[steering gear printed from PLA](/models/steering_gear.stl)|<img height="100" src="images/steering_gear.png">
+1|[steering top plate printed from PLA](/models/steering_top_plate.stl)|<img height="100" src="images/steering_top_plate.png">
+3|[VL53L1X mount printed from PLA](/models/vl53l1x_mount.stl)|<img height="100" src="images/vl53l1x_mount.png">
+3|[VL53L1X mount (deep) printed from PLA](/models/vl53l1x_mount_deep.stl)|<img height="100" src="images/vl53l1x_mount_deep.png">
+1|[M3 stainless steel flat head screws and nuts set](https://www.amazon.de/dp/B0DPKYXVWY)|<img height="100" src="images/M3_1.jpg">
+1|[M3 stainless steel hex screw set](https://www.amazon.de/dp/B08F4SVS2Y)|<img height="100" src="images/M3_2.jpg">
+1|[M3 brass spacer set](https://www.amazon.de/dp/B094337JLF)|<img height="100" src="images/M3_3.jpg">
+2|[brass bevel gears 0.8 15T 3mm hole (2 pieces)](https://www.amazon.de/dp/B0DS1V1BCV)|<img height="100" src="images/bevel_gears.png">
+1|[stainless steel round rods 3mm](https://www.amazon.de/dp/B0D1CFZ9PX)|<img height="100" src="images/steel_rods.png">
+1|[chrome steel ball bearings 3 x 6 x 2.5 mm (20 pieces)](https://www.amazon.de/dp/B0CR1PY2W2)|<img height="100" src="images/ball_bearings.jpg">
+
+## 1. differential gear
+### required parts
+1. 1x [differential gear enclosure](/models/differential_gear_enclosure.stl)
+2. 5x M3 washer from [M3 stainless steel hex screw set](https://www.amazon.de/dp/B08F4SVS2Y)
+3. [2x brass bevel gear 0.8 15T 3mm](https://www.amazon.de/dp/B0DS1V1BCV) without mounting provision
+4. 1x [differential gear cross printed from PLA](/models/differential_gear_cross.stl)
+5. [stainless steel round rods 3mm](https://www.amazon.de/dp/B0D1CFZ9PX) cut to length in vehicle
+6. 1x ball bearing from [chrome steel ball bearings 3 x 6 x 2.5 mm (20 pieces)](https://www.amazon.de/dp/B0CR1PY2W2)
+7. [2x brass bevel gear 0.8 15T 3mm](https://www.amazon.de/dp/B0DS1V1BCV)
+8. 2x long screws from [M3 stainless steel hex screw set](https://www.amazon.de/dp/B08F4SVS2Y)
+9.
+
+### assembly
+![](images/differential_gear_assembly_1.png)
+![](images/differential_gear_assembly_2.png)
+![](images/differential_gear_assembly_3.png)
+
+## 2. drive motor
+### required parts
+
+### assembly
+![](images/drive_motor_assembly_1.png)
+![](images/drive_motor_assembly_2.png)
+
+## 4. front wheels
+### required parts
+
+### assembly
+
+## 5. steering gear
+### required parts
+
+### assembly
+
+## 6. steering
+### required parts
+
+### assembly
+
+## 7. chassis
+### required parts
+
+### assembly
+
+## 2. drive shaft
+### required parts
+
+### assembly
+![](images/drive_shaft_assembly_1.png)
+![](images/drive_shaft_assembly_2.png)
+
+## 8. PCBs
+### required parts
+
+### assembly
+
+## 9. camera
+### required parts
+
+### assembly
+
+## 10. battery
+### required parts
+
+### assembly
+
+# Software preparation
+## Required external parts
 - laptop or desktop computer with Windows, macOS or a Linux distro of choice (macOS has not been tested but should be supported) and an internet connection
 - cable with a USB 2 micro-B plug to connect to the Teensy 4.1
 - USB keyboard and mouse (a USB hub with a slim connector is recommended for connecting to the Raspberry Pi 5 while it is installed in the vehicle)
@@ -12,7 +104,7 @@ for the ATtiny841 (optional):
 - AVR ISP programmer
 - AVR 6-pin ISP 2.54 mm to 1.27 mm adapter
 
-### Teensy 4.1
+## Teensy 4.1
 1. download and install [Visual Studio Code (VSCode)](https://code.visualstudio.com/download)
 2. install the [PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#ide-vscode) extension in VSCode (might need a few minutes)
 3. download and open the [/src/Teensy](/src/Teensy/) directory of this repository in VSCode, the PlatformIO extension should automatically download the necessary framework and library files (might need a few minutes too)
@@ -44,7 +136,7 @@ for the ATtiny841 (optional):
 9. disconnect the USB cable from the Teensy 4.1
 10. put the [upload switch](/v-photos/top.png) into the "RUN" position, this reconnects the Teensy 4.1 to the vehicle power
 
-### Raspberry Pi 5
+## Raspberry Pi 5
 1. plug a microSD card into your computer / laptop (make sure that the contents of this card are not needed anymore)
 2. download the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) and start it (administrator privileges might be required)
 3. select the Raspberry Pi 5, then Raspberry Pi OS (64-bit)
@@ -88,7 +180,7 @@ for the ATtiny841 (optional):
     ```
 17. when everything is working correctly, the lcd screen of the vehicle should now show that it's ready and display objects as they are visible to the camera
 
-### ATtiny841 (optional)
+## ATtiny841 (optional)
 1. completely disconnect the [battery check PCB](/schemes/batteryCheck.png) from the vehicle (while it's powered off)
 2. remove the protection cap from the 1.27 mm ISP connector
 3. connect the MCU to your computer (using the 1.27 to 2.54 mm adapter and the ISP programmer, the ground pin should face away from the battery level display)
