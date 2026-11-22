@@ -1,0 +1,21 @@
+{
+    "rpicam-apps":
+    {
+        "lores":
+        {
+            "width": 640,
+            "height": 640,
+            "format": "rgb"
+        }
+    },
+    "hailo_yolo_inference":
+    {
+        "hef_file": "/home/wro/Documents/yolo11s.hef",
+        "max_detections": 40,
+        "threshold": 0.55
+    },
+    "object_detect_draw_cv":
+    {
+        "line_thickness" : 2
+    }
+}

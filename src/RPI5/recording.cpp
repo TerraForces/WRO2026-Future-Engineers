@@ -27,7 +27,7 @@ struct OBJECT {
 // program start
 int main() {
 
-    // configure and start UART bus at 115200 bits per second
+    // configure and start UART bus at 500000 bits per second
     int32_t uart = open("/dev/ttyAMA0", O_RDWR);
     termios tty;
     tcgetattr(uart, &tty);
@@ -53,7 +53,7 @@ int main() {
     tcsetattr(uart, TCSANOW, &tty);
 
     // start camera + inference pipeline and capture output (command is using error output for logging)
-    ipstream pipe("rpicam-vid --framerate 30 --hflip --vflip --post-process-file ~/Documents/hailo_yolo11s.json -t 180000 -v --width 1296 --height 1296 -o obstacles.mp4", pstreams::pstderr);
+    ipstream pipe("rpicam-vid --framerate 30 --hflip --vflip --post-process-file ~/Documents/hailo_yolo11s_recording.json -t 180000 -n -v --width 1296 --height 1296 -o obstacles.mp4", pstreams::pstderr);
     
     // read output lines and extract important data
     std::string line;
