@@ -12,7 +12,7 @@
 // include sensor and display libraries
 #include <DallasTemperature.h>
 #include "font5x7.hpp"
-#include "icm20948.hpp"
+#include "mpu9250.hpp"
 #include "neopixel.hpp"
 #include "st7735.hpp"
 #include "tcs3472.hpp"
@@ -85,7 +85,7 @@ float rotationFactor = 1.0f;         // rotation factor (should always be close 
 uint16_t servoCenterDuty = 33033;    // PWM duty where the servo lets the vehicle drive perfectly straight
 
 // bus, display and sensor objects
-ICM20948 imu(i2c2);
+MPU9250 imu(i2c2);
 OneWire oneWire(Pin_DS18B20_OneWire);
 DallasTemperature ds18b20(&oneWire);
 NeoPixel leds(Pin_NeoPixel);
@@ -97,6 +97,7 @@ VL53L1X vl53l1x[8] = { &i2c1, &i2c1, &i2c1, &i2c0, &i2c0, &i2c0, &i2c0, &i2c1 };
 struct LOGDATA {
     uint32_t timestamp;   // in ms
     uint32_t updates;
+    float rotation;       // in °
     float batteryVoltage; // in V
     float convCurrent;    // in A
     float driveCurrent;   // in A
@@ -127,7 +128,6 @@ bool sensorError[12] = {};
 bool rpiActive = false;
 uint32_t startTime = 0;
 uint8_t uartReadBuffer[50000] = {};
-uint32_t imuError = 0;
 
 float CAR::getBatteryVoltage() {
     return currentLogData->batteryVoltage;
@@ -275,7 +275,7 @@ void CAR::init(bool rpi5) {
     }
 
     // start IMU
-    sensorError[IMU] = (imuError = imu.begin());
+    sensorError[IMU] = !imu.begin();
 
     // start DS18B20 temperature sensors at 12-bit resolution
     ds18b20.begin();
@@ -337,7 +337,6 @@ void CAR::init(bool rpi5) {
     lcd.drawText(4, 12, font5x7, "ready", Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, (String(millis() / 1000.0f, 2) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 52, font5x7, (String(analogRead(Pin_ADC_Battery) * 0.002519843f, 2) + " V").c_str(), Color_Text, Color_Background, 2);
-    if(imuError) lcd.drawText(4, 72, font5x7, ("error: 0x" + String(imuError, 16)).c_str(), Color_Error, Color_Background);
 }
 
 void CAR::modifyRotationOffset(float change) {
@@ -386,10 +385,10 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
 
             // calculate rotation time offset
             float startRotation = 0.0f;
-            while(imu.getRotation(startRotation)) delay(1);
+            imu.getRotation(startRotation);
             uint32_t endMillis = millis() + rotationDuration;
             while(millis() < endMillis) {
-                imu.getRotation(lastRotation);
+                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             rotationTimeOffset = (startRotation - lastRotation) / rotationDuration;
         }
@@ -404,7 +403,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         if(!waitButtonPress(1000)) {
         
             // calculate initial rotation
-            while(imu.getRotation(lastRotation)) delay(1);
+            imu.getRotation(lastRotation);
             float startRotation = lastRotation + (rotationTimeOffset * millis());
 
             // tell user to turn the vehicle for rotation factor calibration
@@ -412,7 +411,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
             lcd.drawText(4, 4, font5x7, ("please turn " + String(rotationRounds) + " rounds\nand then press button").c_str(), Color_Text, Color_Background);
             delay(500);
             while(digitalReadFast(Pin_Button_INT)) {
-                imu.getRotation(lastRotation);
+                if(digitalReadFast(Pin_IMU_INT)) imu.getRotation(lastRotation);
             }
             lastRotation += rotationTimeOffset * millis();
             rotationFactor = (rotationRounds * 360.0f) / abs(lastRotation - startRotation);
@@ -668,9 +667,9 @@ void CAR::showFinish(const char* userData) {
     uint32_t i = 0;
     while(SD.exists(("/log_" + String(i) + ".csv").c_str())) i++;
     File logFile = SD.open(("/log_" + String(i) + ".csv").c_str(), FILE_WRITE);
-    logFile.println("timestamp,updates,battery_voltage,conv_current,drive_current");
+    logFile.println("timestamp,updates,rotation,battery_voltage,conv_current,drive_current");
     for(LOGDATA* data = logData + 1; data <= currentLogData; data++) logFile.printf(
-        "%u,%u,%.4f,%.4f,%.4f\n", data->timestamp, data->updates, data->batteryVoltage, data->convCurrent, data->driveCurrent
+        "%u,%u,%.4f,%.4f,%.4f,%.4f\n", data->timestamp, data->updates, data->rotation, data->batteryVoltage, data->convCurrent, data->driveCurrent
     );
     logFile.close();
 
@@ -736,7 +735,7 @@ void CAR::showSensorData(bool complete) {
 void CAR::start() {
 
     // set rotation offset
-    while(imu.getRotation(lastRotation)) delay(1);
+    while(!imu.getRotation(lastRotation)) delay(1);
     lastRotation += millis() * rotationTimeOffset;
     lastRotation *= rotationFactor;
     rotationOffset = -lastRotation;
@@ -756,10 +755,12 @@ void CAR::start() {
         for(uint8_t i = 0; i < 8; i++) {
             if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
         }
-        if(imu.getRotation(lastRotation) == 0) {
-            lastRotation += millis() * rotationTimeOffset;
-            lastRotation *= rotationFactor;
-            lastRotation += rotationOffset;
+        if(digitalReadFast(Pin_IMU_INT)) {
+            if(imu.getRotation(lastRotation)) {
+                lastRotation += millis() * rotationTimeOffset;
+                lastRotation *= rotationFactor;
+                lastRotation += rotationOffset;
+            }
         }
     }
     startTime = millis();
@@ -803,11 +804,12 @@ void CAR::update() {
         }
     }
 
-    // read ADC data
+    // read log data
     if(time > nextLogDataUpdateTime) {
         nextLogDataUpdateTime = time + Config_LogData_Update_Int;
         if(currentLogData < lastLogData) currentLogData++;
         currentLogData->timestamp = millis();
+        currentLogData->rotation = lastRotation;
         currentLogData->batteryVoltage = analogRead(Pin_ADC_Battery) * 0.002519843f;
         currentLogData->convCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Conv)) * 0.004354941f;
         currentLogData->driveCurrent = (3103.0303f - analogRead(Pin_ADC_Current_Drive)) * 0.004354941f;
@@ -839,12 +841,13 @@ void CAR::update() {
         if(digitalRead(Pins_VL53L1X_INT[i])) vl53l1x[i].getDistance(lastDistance + i);
     }
 
-    // update rotation
-    while((imuError = imu.getRotation(lastRotation)) == 0x020C);
-    if(imuError == 0) {
-        lastRotation += millis() * rotationTimeOffset;
-        lastRotation *= rotationFactor;
-        lastRotation += rotationOffset;
+    // update rotation when IMU data ready interrupt has been sent
+    if(digitalReadFast(Pin_IMU_INT)) {
+        if(imu.getRotation(lastRotation)) {
+            lastRotation += millis() * rotationTimeOffset;
+            lastRotation *= rotationFactor;
+            lastRotation += rotationOffset;
+        }
     }
 
     // toggle onboard LED (helps debugging whether the program is executing this update function)

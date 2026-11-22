@@ -275,13 +275,13 @@ void wallCorrection() {
             while((getRotation() - (curveCount * (direction ? -90.0f : 90))) > -wallReactionTargetAngle) update();
         }
         else if(knownObstacles[curveCount & 3] != 1) {
-            if(getDistance(FrontRight) > wallReactionDistance2) {
+            if(getDistance(FrontLeft) > wallReactionDistance2) {
                 setServo(wallReactionAngle);
                 while((getRotation() - (curveCount * (direction ? -90.0f : 90))) < wallReactionTargetAngle) update();
             }
         }
         else {
-            if((getDistance(FrontRight) > wallReactionDistance2) && (getDistance(FrontRight) < wallReactionDistanceThreshold) && (getDistance(RearCenter) > 1250)) {
+            if((getDistance(FrontLeft) > wallReactionDistance2) && (getDistance(FrontLeft) < wallReactionDistanceThreshold) && (getDistance(RearCenter) > 1250)) {
                 setServo(wallReactionAngle);
                 while((getRotation() - (curveCount * (direction ? -90.0f : 90))) < wallReactionTargetAngle) update();
             }
@@ -292,7 +292,7 @@ void wallCorrection() {
 
 void readObject(uint32_t minHeight = 0, uint8_t imageSide = 0, bool second_Object = 0) { // 1 = right half; 2 = left half
     uint8_t knownObstacle;
-    if(second_Object){
+    if(second_Object) {
         knownObstacle = knownObstacles[curveCount & 3];
         knownObstacles[curveCount & 3] = 0;
     }
@@ -310,14 +310,11 @@ void readObject(uint32_t minHeight = 0, uint8_t imageSide = 0, bool second_Objec
             }
         }
     }
-    if(second_Object){
+    if(second_Object) {
         change_Side_in_Section[curveCount & 3] = ((knownObstacles[curveCount & 3] != 0)?(!(knownObstacle == knownObstacles[curveCount & 3])):(0));
         knownObstacles[curveCount & 3] = knownObstacle;
     }
 }
-
-
-
 
 void change_driving_Side(){
     setVelocity(slowSpeed,0,0.4f,-2.5f);
@@ -335,63 +332,19 @@ void change_driving_Side(){
     nearInnerBorder = !nearInnerBorder;
 }
 
-
 // update sensors and drive while waiting
 void wait(uint32_t ms) {
-    update();
     timestamp = millis() + ms;
     while(millis() < timestamp) update();
 }
 
-// update sensors and drive while waiting
+// update sensors, drive and servo while waiting
 void waitReaction(uint32_t ms) {
-    update();
     timestamp = millis() + ms;
-    while(millis() < timestamp){
+    while(millis() < timestamp) {
         update();
-        setServo(((getRotation() - (curveCount * (direction ? -90.0f : 90.0f)))) * (-reactionFactor));
-    } 
-}
-
-void turnInParkingSpace(){
-    wait(250);
-    bool turningClockwise = getDistance(FrontLeft) > getDistance(FrontRight);
-    setVelocity(-parkSpeed);
-    setServo(turningClockwise? 55.0f: -55.0f);
-    while(abs(getRotation() - ((curveCount -1) * (direction ? -90.0f : 90.0f))) < 20.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-
-    setVelocity(parkSpeed);
-    setServo(turningClockwise? -55.0f: 55.0f);
-    while(abs(getRotation() - ((curveCount -1) * (direction ? -90.0f : 90.0f))) < 45.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-
-    setVelocity(-parkSpeed);
-    setServo(turningClockwise? 55.0f: -55.0f);
-    while(abs(getRotation() - ((curveCount-1) * (direction ? -90.0f : 90.0f))) < 55.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-
-    setVelocity(parkSpeed);
-    setServo(turningClockwise? -55.0f: 55.0f);
-    while(abs(getRotation() - ((curveCount -1) * (direction ? -90.0f : 90.0f))) < 70.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-
-    setVelocity(-parkSpeed);
-    setServo(turningClockwise? 55.0f: -55.0f);
-    while(abs(getRotation() - ((curveCount -1) * (direction ? -90.0f : 90.0f))) < 80.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-
-    setVelocity(parkSpeed);
-    setServo(turningClockwise? -55.0f: 55.0f);
-    while(abs(getRotation() - ((curveCount -1) * (direction ? -90.0f : 90.0f))) < 88.0f)update();
-    setVelocity(0.0f, true);
-    wait(250);
-        
+        setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor);
+    }
 }
 
 void setup() {
@@ -527,7 +480,7 @@ void setup() {
     setVelocity(0.0f, true);
 
     while(curveCount < 11) {
-        update();
+
         // first round
         if(knownObstacles[(curveCount + 1) & 3] == 0) {
             if(nearInnerBorder) {
@@ -632,7 +585,6 @@ void setup() {
                 }
 
                 setVelocity(fastSpeed);
-
                 while((getDistance(FrontCenter) > 1350) || (millis() < (timestamp + 250))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     if((getDistance(FrontCenter) > 1400) && (getDistance(RearCenter) < 1550)) wallCorrection();
@@ -642,7 +594,7 @@ void setup() {
                 wait(15);
                 setVelocity(slowSpeed);
                 uint32_t timestamp2 = millis();
-                while((getDistance(direction ? FrontRight : FrontLeft) < 1100) || (getDistance(FrontCenter) > 1100) || (millis() < (timestamp2 + 50))) {
+                while((getDistance(direction ? FrontRight : FrontLeft) < 1100) || (getDistance(FrontCenter) > 1100) || (millis() < (timestamp2 + 500))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                     if(getDistance(FrontCenter) < 110) {
                         curveCount++;
@@ -653,7 +605,6 @@ void setup() {
                         }
                         curveCount--;
                     }
-                    //if((timestamp2 + 4000) > millis()) showSensorData();
                     update();
                 }
             }
@@ -773,8 +724,7 @@ void setup() {
                 update();
                 setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
-            setVelocity(0.0f,true);
-            turnInParkingSpace();
+            setVelocity(0.0f, true);
         }
         else {
             setVelocity(parkSpeed);
@@ -802,7 +752,6 @@ void setup() {
                 update();
                 setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
-            turnInParkingSpace();
         }
     }
     else if(knownObstacles[0] == 1) {
@@ -848,8 +797,7 @@ void setup() {
                 update();
                 setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
-            setVelocity(0.0f,true);
-            turnInParkingSpace();
+            setVelocity(0.0f, true);
         }
         else {
             setVelocity(parkSpeed);
@@ -877,10 +825,26 @@ void setup() {
                 update();
                 setServo((getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
             }
-            turnInParkingSpace();
         }
     }
-    setVelocity(0.0f, true);
+
+    wait(250);
+    bool turningClockwise = getDistance(FrontLeft) > getDistance(FrontRight);
+
+    #define PARKING_MOVE(forward, end) \
+    setVelocity(forward ? parkSpeed : -parkSpeed); \
+    setServo((turningClockwise == forward) ? -55.0f : 55.0f); \
+    while(abs(getRotation() - ((curveCount - 1) * (direction ? -90.0f : 90.0f))) < end) update(); \
+    setVelocity(0.0f, true); \
+    wait(250)
+
+    PARKING_MOVE(false, 20.0f);
+    PARKING_MOVE(true, 45.0f);
+    PARKING_MOVE(false, 55.0f);
+    PARKING_MOVE(true, 70.0f);
+    PARKING_MOVE(false, 80.0f);
+    PARKING_MOVE(true, 88.0f);
+
     setServo(0.0f);
     showFinish();
 }
