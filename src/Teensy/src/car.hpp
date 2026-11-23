@@ -17,7 +17,7 @@ namespace CAR {
 
     // NeoPixel LED color (8-bit / channel)
     struct COLOR8 {
-        uint8_t g, r, b; // transmit order: green, red, blue
+        uint8_t r, g, b;
     };
 
     // TCS3472 color values

@@ -13,9 +13,9 @@
 // object representing a NeoPixel LED strip
 struct NeoPixel {
 
-    // 8-bit/channel RGB color in transfer order (green, red, blue)
+    // 8-bit/channel RGB color
     struct COLOR {
-        uint8_t g, r, b;
+        uint8_t r, g, b;
     };
 
     /// @brief initializes NeoPixel object, no communication will be performed

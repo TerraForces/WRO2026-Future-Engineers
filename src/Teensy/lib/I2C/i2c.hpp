@@ -1,5 +1,6 @@
 /**
  * i2c.hpp - I2C bus interface library (master mode only)
+ * Wire library extended with sensor register access functions
  * by TerraForces
  */
 
@@ -14,10 +15,10 @@
 
 struct I2C {
 	typedef struct {
-		const uint8_t 		pin;		// The pin number
-		const uint32_t 		mux_val;	// Value to set for mux;
-		volatile uint32_t	*select_input_register; // Which register controls the selection
-		const uint32_t		select_val;	// Value for that selection
+		const uint8_t pin;
+		const uint32_t mux_val;
+		volatile uint32_t* select_input_register;
+		const uint32_t select_val;
 	} pin_info_t;
 
 	typedef struct {
@@ -33,7 +34,6 @@ struct I2C {
 	static const I2C_Hardware_t i2c3_hardware;
 	static const I2C_Hardware_t i2c4_hardware;
 
-    // master and slave mode
     constexpr I2C(const uint32_t _portAddr, const I2C_Hardware_t &myhardware) : portAddr(_portAddr), hardware(myhardware) {}
     void setSDA(uint8_t pin);
 	void setSCL(uint8_t pin);
@@ -51,16 +51,44 @@ struct I2C {
 		return rxBuffer[rxBufferIndex];
 	}
 
-    // only master mode
 	void begin(uint32_t frequency = 100000);
     void setClock(uint32_t frequency);
     void beginTransmission(uint8_t address);
     uint8_t endTransmission(uint8_t sendStop = 1);
     uint8_t requestFrom(uint8_t address, uint32_t size, bool sendStop = true);
     
+    /// @brief reads from registers of an I2C device (8-bit register address)
+    /// @param address I2C address of the target device
+    /// @param start register address where the read operation should start (most devices auto-increment this with every byte read)
+    /// @param data buffer that should hold the data, has to hold min. size bytes
+    /// @param size number of bytes that should be read
+    /// @param sendStop whether a stop signal should be sent after transmitting the register address
+    /// @returns whether size bytes have successfully been read
     bool readRegs(uint8_t address, uint8_t start, void* data, uint32_t size, bool sendStop);
+
+    /// @brief reads from registers of an I2C device (16-bit register address)
+    /// @param address I2C address of the target device
+    /// @param start register address where the read operation should start (most devices auto-increment this with every byte read)
+    /// @param data buffer that should hold the data, has to hold min. size bytes
+    /// @param size number of bytes that should be read
+    /// @param sendStop whether a stop signal should be sent after transmitting the register address
+    /// @returns whether size bytes have successfully been read
     bool readDRegs(uint8_t address, uint16_t start, void* data, uint32_t size, bool sendStop);
+
+    /// @brief writes to registers of an I2C device (8-bit register address)
+    /// @param address I2C address of the target device
+    /// @param start register address where the write operation should start (most devices auto-increment this with every byte read)
+    /// @param data buffer containing the data that should be written
+    /// @param size number of bytes that should be written
+    /// @returns whether size bytes have successfully been written and acknowledged
     bool writeRegs(uint8_t address, uint8_t start, void* data, uint32_t size);
+
+    /// @brief writes to registers of an I2C device (16-bit register address)
+    /// @param address I2C address of the target device
+    /// @param start register address where the write operation should start (most devices auto-increment this with every byte read)
+    /// @param data buffer containing the data that should be written
+    /// @param size number of bytes that should be written
+    /// @returns whether size bytes have successfully been written and acknowledged
     bool writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size);
 
 private:

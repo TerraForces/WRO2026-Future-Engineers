@@ -359,13 +359,10 @@ bool I2C::readRegs(uint8_t address, uint8_t start, void* data, uint32_t size, bo
 
 bool I2C::readDRegs(uint8_t address, uint16_t start, void* data, uint32_t size, bool sendStop) {
 	if(!data) return false;
-	for(uint8_t i = 0; i < 5; i++) {
-		beginTransmission(address);
-		if (txBufferLength >= I2C_BUFFER_LENGTH + 2) return false;
-		*(uint16_t*)(txBuffer + txBufferLength) = start;
-		txBufferLength += 2;
-		if(endTransmission(sendStop) == 0) break;
-	}
+	beginTransmission(address);
+	txBuffer[txBufferLength++] = start >> 8;
+	txBuffer[txBufferLength++] = start & 0xFF;
+	endTransmission(sendStop);
 	if(requestFrom(address, size) < size) return false;
 	memcpy(data, rxBuffer + rxBufferIndex, size);
 	rxBufferIndex += size;
@@ -379,7 +376,7 @@ bool I2C::writeRegs(uint8_t address, uint8_t start, void* data, uint32_t size) {
 	txBuffer[txBufferLength++] = start;
 	memcpy(txBuffer + txBufferLength, data, size);
 	txBufferLength += size;
-	return !endTransmission();
+	return endTransmission() == 0;
 }
 
 bool I2C::writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size) {
@@ -388,11 +385,9 @@ bool I2C::writeDRegs(uint8_t address, uint16_t start, void* data, uint32_t size)
 	if (txBufferLength >= I2C_BUFFER_LENGTH + 2 + size) return false;
 	txBuffer[txBufferLength++] = start >> 8;
 	txBuffer[txBufferLength++] = start & 0xFF;
-	/**(uint16_t*)(txBuffer + txBufferLength) = start;
-	txBufferLength += 2;*/
 	memcpy(txBuffer + txBufferLength, data, size);
 	txBufferLength += size;
-	return !endTransmission();
+	return endTransmission() == 0;
 }
 
 void lpi2c1_isr(void) { i2c0.isr(); }

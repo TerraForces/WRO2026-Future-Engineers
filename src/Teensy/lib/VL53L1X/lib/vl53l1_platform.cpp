@@ -63,11 +63,7 @@ VL53L1_Error VL53L1_CommsClose(VL53L1_Dev_t *pdev) {
 }
 
 VL53L1_Error VL53L1_WriteMulti(VL53L1_Dev_t *pdev, uint16_t index, uint8_t *pdata, uint32_t count) {
-	pdev->i2c->beginTransmission(pdev->i2c_slave_address);          // start I2C transmission to sensor address
-    pdev->i2c->write(index >> 8);                                   // write first byte of register address
-    pdev->i2c->write(index);                                        // write second byte of register address
-	for(uint32_t i = 0; i < count; i++) pdev->i2c->write(pdata[i]); // write count bytes of payload
-    return pdev->i2c->endTransmission(true) ? VL53L1_ERROR_CONTROL_INTERFACE : VL53L1_ERROR_NONE;
+    return pdev->i2c->writeDRegs(pdev->i2c_slave_address, index, pdata, count) ? VL53L1_ERROR_NONE : VL53L1_ERROR_CONTROL_INTERFACE;
 }
 
 VL53L1_Error VL53L1_ReadMulti(VL53L1_Dev_t *pdev, uint16_t index, uint8_t *pdata, uint32_t count) {

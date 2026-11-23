@@ -114,19 +114,31 @@ int32_t targetVelocity = 0;
 int32_t acceleration = 1;
 int32_t deceleration = -1;
 
-// 
+// next update millisecond timestamps for (de-)acceleration ramp and log data
 uint32_t nextDriveUpdateTime = 0;
 uint32_t nextLogDataUpdateTime = 0;
+
+// last received sensor measurements (read through car.hpp API functions)
 CAR::COLOR16 lastColor = {};
 uint16_t lastDistance[8] = {};
 std::vector<CAR::OBJECT> lastObjects, currentObjects;
 float lastRotation = 0.0f;
+
+// rotation offset to virtually set the rotation to 0° after start()
 float rotationOffset = 0.0f;
+
+// sensor states (see SENSORS in car.hpp)
 bool sensorActive[12] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 bool sensorWarning[12] = {};
 bool sensorError[12] = {};
+
+// whether the Raspberry Pi has been started successfully (if requested)
 bool rpiActive = false;
+
+// millisecond timestamp where the start button has been released
 uint32_t startTime = 0;
+
+// additional RX buffer for the incoming object data
 uint8_t uartReadBuffer[50000] = {};
 
 float CAR::getBatteryVoltage() {
@@ -314,7 +326,7 @@ void CAR::init(bool rpi5) {
 
     if(rpi5) {
 
-        // wait for RPI5 to send the ready/handshake packet
+        // wait for RPI5 to send the first object data
         while(Serial7.available() < (int)sizeof(OBJECT)) {
 
             // when enabled, force a reboot of the RPI5 after Config_RPI5_Startup_Millis milliseconds
@@ -595,7 +607,7 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
         }
     }
 
-    // write results to sd card
+    // write calibration results to microSD card
     SD.remove("/config.txt");
     File file = SD.open("/config.txt", FILE_WRITE_BEGIN);
     for(uint8_t i = 0; i < 8; i++) file.println(vl53l1xViewportShift[i]);
@@ -607,6 +619,8 @@ void CAR::runCalibration(const uint32_t preSamples, const uint32_t mainSamples, 
 
 void CAR::runI2cScan() {
     lcd.fillScreen(Color_Background);
+
+    // scan all valid addresses of all I2C ports and display whether the transmission has ended with a timeout (result 4) or has been answered by another device
     I2C *i2cs[] = { &i2c0, &i2c1, &i2c2 };
     for(uint8_t i = 0; i < (sizeof(i2cs) / sizeof(i2cs[0])); i++) {
         lcd.drawText(4 + (i * 50), 4, font5x7, ("I2C " + String(i)).c_str(), Color_Text, Color_Background);
@@ -636,7 +650,7 @@ void CAR::setVelocity(float _velocity, bool _brakes, float _acceleration, float 
         currentVelocity = 0;
     }
 
-    // calculate PWM duty and duty change values for update()
+    // calculate PWM target duty and duty change values for update()
     else {
         targetVelocity = constrain(_velocity, -1.0f, 1.0f) * 0xFFFF;
         if(_acceleration < 0) _acceleration = -_acceleration;
@@ -649,21 +663,31 @@ void CAR::setVelocity(float _velocity, bool _brakes, float _acceleration, float 
 }
 
 void CAR::setServo(float angle) {
+
+    // limit servo angle to prevent hitting the chassis
     analogWrite(Pin_Servo_PWM, servoCenterDuty + (int)(((angle < -Config_Servo_Max_Angle) ? -Config_Servo_Max_Angle : ((angle > Config_Servo_Max_Angle) ? Config_Servo_Max_Angle : angle)) * Config_Servo_Angle_To_Duty));
 }
 
 void CAR::showFinish(const char* userData) {
     uint32_t time = millis() - startTime;
     lcd.fillScreen(Color_Background);
+
+    // display collected sensor errors
     for(uint8_t i = 0; i < 12; i++) lcd.drawRect(4 + (i * 13), 4, 9, 4, sensorError[i] ? Color_Error : (sensorWarning[i] ? Color_Warning : Color_Running));
+
+    // display run time and current temperatures
     lcd.drawText(4, 12, font5x7, ("time: " + String(time / 1000.0f) + " s").c_str(), Color_Text, Color_Background, 2);
     lcd.drawText(4, 32, font5x7, ("convs: " + String(getConverterTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 40, font5x7, ("core: " + String(getCoreTemp()) + " C").c_str(), Color_Text, Color_Background);
     lcd.drawText(4, 48, font5x7, ("MOSFET: " + String(getMosfetTemp()) + " C").c_str(), Color_Text, Color_Background);
+
+    // display additional data if provided (debug)
     lcd.drawText(4, 56, font5x7, userData, Color_Text, Color_Background);
+
+    // draw yellow bar indicating that the save is still in progress
     lcd.drawRect(0, 126, 160, 2, Color_Warning);
 
-    // write recorded log data to SD card
+    // write recorded log data to SD card as a simple CSV (comma seperated values) file
     uint32_t i = 0;
     while(SD.exists(("/log_" + String(i) + ".csv").c_str())) i++;
     File logFile = SD.open(("/log_" + String(i) + ".csv").c_str(), FILE_WRITE);
@@ -683,10 +707,14 @@ void CAR::showFinish(const char* userData) {
 
 void CAR::showObjects() {
     lcd.fillScreen(Color_Background);
+
+    // draw image outline
     lcd.drawRect(9, 9, 1, 110, Color_Text);
     lcd.drawRect(119, 9, 1, 110, Color_Text);
     lcd.drawRect(10, 9, 108, 1, Color_Text);
     lcd.drawRect(10, 119, 108, 1, Color_Text);
+
+    // draw objects in opposite order
     uint8_t objectCounts[3] = {};
     for(int32_t i = lastObjects.size() - 1; i >= 0; i--) {
         CAR::OBJECT object = lastObjects[i];
@@ -698,19 +726,25 @@ void CAR::showObjects() {
                 lcd.drawText(11 + (object.x / 12), 11 + (object.y / 12), font5x7, (String(object.p / 10.0f, 1) + "%").c_str(), Color_Text, color);
                 objectCounts[object.c]++;
 
-                // data of first detected object (temp)
+                // print data of first detected object (debug)
                 if(i == 0) lcd.drawText(2, 121, font5x7, ("x=" + String(object.x) + " y=" + String(object.y) + " w=" + String(object.w) + " h=" + String(object.h)).c_str(), Color_Text, Color_Background);
             }
         }
     }
+
+    // print number of objects per color
     for(uint8_t i = 0; i < 3; i++) {
         lcd.drawRect(130, 9 + (i * 8), 7, 7, Colors_Objects[i]);
         lcd.drawText(138, 9 + (i * 8), font5x7, String(objectCounts[i]).c_str(), Color_Text, Color_Background);
     }
+
+    // print battery voltage
     lcd.drawText(130, 33, font5x7, (String(getBatteryVoltage()) + "V").c_str(), Color_Text, Color_Background);
 }
 
 void CAR::showSensorData(bool complete) {
+
+    // draw static parts of the sensor data screen only when requested to save time
     if(complete) {
         lcd.fillScreen(Color_Background);
         for(uint8_t i = 0; i < 8; i++) lcd.drawText(2, 2 + (i * 8), font5x7, (directions[i] + String(": ")).c_str(), Color_Text, Color_Background);
@@ -804,7 +838,7 @@ void CAR::update() {
         }
     }
 
-    // read log data
+    // read log data (especially ADCs) every Config_LogData_Update_Int milliseconds
     if(time > nextLogDataUpdateTime) {
         nextLogDataUpdateTime = time + Config_LogData_Update_Int;
         if(currentLogData < lastLogData) currentLogData++;
