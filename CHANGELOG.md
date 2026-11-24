@@ -4,6 +4,14 @@
 - add IMU temperature compensation
 - write engineering journal
 
+## commit #33 "translated and extended engineering journal"
+- fully translated [engineering journal](/other/engineering_journal.odt)
+- [engineering journal](/other/engineering_journal.odt) shortened by unimportant parts from the national competition
+- [engineering journal](/other/engineering_journal.odt) extended with recent changes (e.g. ICM-20948) and images
+- added Open Challenge state machine to [engineering journal](/other/engineering_journal.odt)
+- [engineering journal](/other/engineering_journal.odt) exported as [PDF](/other/engineering_journal.pdf)
+- fixed typos in [README.md](/README.md)
+
 ## commit #32 "extended code comments, fix for access to 16-bit register addresses over I2C"
 - added [changelog](/CHANGELOG.md) of past commits back to the international final invitation
 - extended comments in [car.cpp](/src/Teensy/src/car.cpp), [neopixel.cpp](/src/Teensy/lib/NeoPixel/neopixel.cpp) and [i2c.hpp](/src/Teensy/lib/I2C/i2c.hpp)
