@@ -2,7 +2,11 @@
 
 ## TODO
 - add IMU temperature compensation
-- write engineering journal
+
+## commit #34 "minor engineering journal changes and extended driving logic comments"
+- added all additional curve start conditions to [engineering journal](/other/engineering_journal.odt)
+- minor changes in [engineering journal](/other/engineering_journal.odt), especially in the "Systems Thinking and Engineering Decisions" chapter
+- updated and extended comments in [main.cpp](/src/Teensy/src/main.cpp)
 
 ## commit #33 "translated and extended engineering journal"
 - fully translated [engineering journal](/other/engineering_journal.odt)

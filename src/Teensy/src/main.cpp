@@ -133,22 +133,20 @@ void setup() {
 void loop() {
     update();
 
-    // start curve when detected (cooldown of 1.3 s between curves to prevent driving circles)
+    // start curve when detected (cooldown of 1 s between curves to prevent driving in circles)
     if((timestamp + 1000) < millis()) {
         if(((direction ? (getDistance(FrontRight) > 800) : (getDistance(FrontLeft) > 800)) || (getDistance(FrontCenter) < ((sectionWidth[curveCount & 3] == 2) ? 900 : 400))) 
-            && (getDistance(RearCenter) > 1700)
-            && (getRotation() + (direction ? (curveCount * 90.0f) : (curveCount * -90.0f)) < 7.0f))
-            driveCurve();
+            && (getDistance(RearCenter) > 1700) && (getRotation() + (direction ? (curveCount * 90.0f) : (curveCount * -90.0f)) < 7.0f)) driveCurve();
     }
 
-    // drive away from the left wall when getting too close (< 15 cm) and next curve is far enough away (> 80 cm)
+    // drive away from the left wall when getting too close (< 12 cm) and next curve is far enough away (> 95 cm)
     else if((getDistance(FrontLeft) < 120) && (getDistance(FrontCenter) > 950)) {
         setServo(-wallReactionAngle);
         while(getRotation() > (((direction == 0) ? 90.0f : -90.0f) * curveCount) - 4.0f) update();
         if((timestamp + 800) < millis()) timestamp = millis() - 800;
     }
 
-    // drive away from the right wall when getting too close (< 15 cm) and next curve is far enough away (> 80 cm)
+    // drive away from the right wall when getting too close (< 12 cm) and next curve is far enough away (> 95 cm)
     else if((getDistance(FrontRight) < 120) && (getDistance(FrontCenter) > 950)) {
         setServo(wallReactionAngle);
         while(getRotation() < (((direction == 0) ? 90.0f : -90.0f) * curveCount) + 4.0f) update();
@@ -188,18 +186,19 @@ void loop() {
 
 #else
 
-// functions to detect whether a line of this color is visible below the color sensor
+// detect whether an orange line is visible below the color sensor
 bool onOrangeLine() {
     CAR::COLOR16 color = CAR::getColor();
     return color.r > (color.b * 2.625f);
 }
+
+// detect whether a blue line is visible below the color sensor
 bool onBlueLine() {
     CAR::COLOR16 color = CAR::getColor();
     return color.b > (color.r * 1.1f);
 }
 
 // angle configuration
-constexpr float curveServoAngle         = 37.5f;
 constexpr float reactionFactor          = 0.3f;
 constexpr float wallReactionAngle       = 8.0f;
 constexpr float wallReactionTargetAngle = 4.0f;
@@ -218,11 +217,11 @@ constexpr float fastSpeed   = 0.82f;
 constexpr float slowSpeed   = 0.275f;
 float parkSpeed;
 
-bool direction = 0;             // 0 = counterclockwise, 1 = clockwise
-bool parkingSpace = 0;          // 0 = parking space at the end of the section, 1 = parking space at the beginning of the section (in driving direction)
-uint8_t knownObstacles[4] = {}; // 0 = unknown, 1 = drive next to the inner border, 2 = drive next to the outer border
-bool change_Side_in_Section[4] = {};
-bool nearInnerBorder = false;   // indicates where the vehicle is currently driving
+bool direction = 0;               // 0 = counterclockwise, 1 = clockwise
+bool parkingSpace = 0;            // 0 = parking space at the end of the section, 1 = parking space at the beginning of the section (in driving direction)
+uint8_t knownObstacles[4] = {};   // 0 = unknown, 1 = drive next to the inner border, 2 = drive next to the outer border
+bool changeSideInSection[4] = {}; // whether the driving side/lane/track should be changed (for each section of the round)
+bool nearInnerBorder = false;     // indicates whether the vehicle is currently driving on the inner side/lane/track
 uint8_t curveCount = 0;
 uint32_t timestamp = 0;
 
@@ -267,7 +266,6 @@ void wallCorrection() {
                 while((getRotation() - (curveCount * (direction ? -90.0f : 90))) > -wallReactionTargetAngle) update();
             }
         }
-
     }
     else {
         if(getDistance(FrontLeft) < wallReactionDistance) {
@@ -311,24 +309,23 @@ void readObject(uint32_t minHeight = 0, uint8_t imageSide = 0, bool second_Objec
         }
     }
     if(second_Object) {
-        change_Side_in_Section[curveCount & 3] = ((knownObstacles[curveCount & 3] != 0)?(!(knownObstacle == knownObstacles[curveCount & 3])):(0));
+        changeSideInSection[curveCount & 3] = ((knownObstacles[curveCount & 3] != 0)?(!(knownObstacle == knownObstacles[curveCount & 3])):(0));
         knownObstacles[curveCount & 3] = knownObstacle;
     }
 }
 
-void change_driving_Side(){
-    setVelocity(slowSpeed,0,0.4f,-2.5f);
-    setServo((nearInnerBorder == direction)?40.0f:-40.0f);
-    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f)))  < 45.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -45.0f)) update();
+void changeDrivingSide() {
+    setVelocity(slowSpeed, 0, 0.4f, -2.5f);
+    setServo((nearInnerBorder == direction) ? 40.0f : -40.0f);
+    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 45.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -45.0f)) update();
 
-    while(getDistance(((direction == nearInnerBorder)?AngledLeft:AngledRight)) > ((((curveCount & 3) == 0)&&((nearInnerBorder)))?400:270)){
+    while(getDistance((direction == nearInnerBorder) ? AngledLeft:AngledRight) > ((((curveCount & 3) == 0) && ((nearInnerBorder))) ? 400 : 270)) {
         update();
-        setServo(((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) - ((direction == nearInnerBorder)?(50.0f):(-50.0f))) * (-reactionFactor));
+        setServo(((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) - ((direction == nearInnerBorder) ? 50.0f : -50.0f)) * (-reactionFactor));
     }
     
-    setServo((nearInnerBorder == direction)?-40.0f:40.0f);
-    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f)))  > 10.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < -10.0f)) update();
-
+    setServo((nearInnerBorder == direction) ? -40.0f : 40.0f);
+    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > 10.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < -10.0f)) update();
     nearInnerBorder = !nearInnerBorder;
 }
 
@@ -481,7 +478,7 @@ void setup() {
 
     while(curveCount < 11) {
 
-        // first round
+        // first round (traffic signs unknown)
         if(knownObstacles[(curveCount + 1) & 3] == 0) {
             if(nearInnerBorder) {
                 curveCount++;
@@ -506,7 +503,6 @@ void setup() {
                         setServo((getRotation() - ((curveCount) * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                         update();
                     }
-
                     curveCount++;
                     setServo(direction ? -45.0f : 45.0f);
                     while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
@@ -565,23 +561,17 @@ void setup() {
 
                 while((getDistance(FrontCenter) > 2100)|| (getDistance(RearCenter) < 920)||(abs(getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > 8) || (getDistance(FrontRight) > 1000) || (getDistance(FrontLeft) > 1000) || (millis() < (timestamp + 250))) /*&& ((abs(getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 8)||(getDistance(FrontLeft) < 1000)||(getDistance(FrontRight) < 1000))*/{
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
-                    //if((getDistance(FrontCenter) > 1400) && (getDistance(RearCenter) < 1550)) wallCorrection();
-                    //else update();
                     update();
                 }
                 setVelocity(slowSpeed);
-                //setLEDs({255,255,255});
-                setServo((nearInnerBorder == direction)?35.0f:-35.0f);
-                while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f)))  < 10.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -10.0f)) update();
-                //setLEDs({0,0,0});
-                readObject(100,(nearInnerBorder? ((int)direction + 1): 0),true);
-                if(direction){
-                    if((curveCount & 3) == 0) waitReaction(300);
-                }
-                if(change_Side_in_Section[curveCount & 3]) change_driving_Side();
+                setServo((nearInnerBorder == direction) ? 35.0f : -35.0f);
+                while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 10.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -10.0f)) update();
+                readObject(100, nearInnerBorder ? ((int)direction + 1) : 0, true);
+                if(direction && ((curveCount & 3) == 0)) waitReaction(300);
+                if(changeSideInSection[curveCount & 3]) changeDrivingSide();
                 else {
-                    setServo((nearInnerBorder == direction)?-35.0f:35.0f);
-                    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f)))  > -7.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 7.0f)) update();
+                    setServo((nearInnerBorder == direction) ? -35.0f : 35.0f);
+                    while((direction == nearInnerBorder) ? ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > -7.0f) : ((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 7.0f)) update();
                 }
 
                 setVelocity(fastSpeed);
@@ -599,7 +589,7 @@ void setup() {
                     if(getDistance(FrontCenter) < 110) {
                         curveCount++;
                         readObject(0, (int)(!direction) + 1);
-                        if((nearInnerBorder) && (knownObstacles[curveCount & 3] == 0)) {
+                        if(nearInnerBorder && (knownObstacles[curveCount & 3] == 0)) {
                             wait(50);
                             readObject(0, (int)(!direction) + 1);
                         }
@@ -610,7 +600,7 @@ void setup() {
             }
         }
 
-        // second and third round
+        // second and third round (traffic signs known)
         else {
             if(knownObstacles[(curveCount + 1) & 3] == 2) {
                 timestamp = millis();
@@ -634,14 +624,12 @@ void setup() {
             while(direction ? (getRotation() > ((curveCount * -90.0f) + 10.0f)) : (getRotation() < ((curveCount * 90.0f) - 10.0f))) update();
             timestamp = millis();
 
-            if(change_Side_in_Section[curveCount & 3]){
-                while((getDistance(FrontCenter) > 2100)|| (getDistance(RearCenter) < 920)||(abs(getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > 8) || (getDistance(FrontRight) > 1000) || (getDistance(FrontLeft) > 1000) || (millis() < (timestamp + 250))) /*&& ((abs(getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) < 8)||(getDistance(FrontLeft) < 1000)||(getDistance(FrontRight) < 1000))*/{
+            if(changeSideInSection[curveCount & 3]) {
+                while((getDistance(FrontCenter) > 2100) || (getDistance(RearCenter) < 920) || (abs(getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) > 8) || (getDistance(FrontRight) > 1000) || (getDistance(FrontLeft) > 1000) || (millis() < (timestamp + 250))) {
                     setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
-                    //if((getDistance(FrontCenter) > 1400) && (getDistance(RearCenter) < 1550)) wallCorrection();
-                    //else update();
                     update();
                 }
-                change_driving_Side();
+                changeDrivingSide();
             }
 
             setVelocity(fastSpeed);
@@ -656,7 +644,6 @@ void setup() {
                 setServo((getRotation() - (curveCount * (direction ? -90.0f : 90.0f))) * reactionFactor * -2.0f);
                 update();
             }
-            
         }
     }
 
